@@ -52,10 +52,10 @@ def loss(pred_seg_maps,gt_map,kernels,training_mask):
             neg_mask = tf.cast(tf.equal(gt_map, 0.),dtype=tf.float32)
             n_pos=tf.reduce_sum((pos_mask),[0,1])
 
-            neg_val_all = tf.boolean_mask(pred_map, neg_mask)       # [N]
-            n_neg=tf.minimum(tf.shape(neg_val_all)[-1],tf.cast(n_pos*3,tf.int32))
+            neg_val_all = tf.boolean_mask(pred_map, neg_mask)       # [N] # boolean mask, 取出mask对应的部分
+            n_neg=tf.minimum(tf.shape(neg_val_all)[-1],tf.cast(n_pos*3,tf.int32)) # -1 代表对最完整的做OHM
             n_neg=tf.cond(tf.greater(n_pos,0),lambda:n_neg,lambda:tf.shape(neg_val_all)[-1])
-            neg_hard, neg_idxs = tf.nn.top_k(neg_val_all, k=n_neg)       #[batch_size,k][batch_size, k]
+            neg_hard, neg_idxs = tf.nn.top_k(neg_val_all, k=n_neg)       #[batch_size,k][batch_size, k] 选择最大的那些，加上mask
             # TODO ERROR  slice index -1 of dimension 0 out of bounds.
             neg_min=tf.cond(tf.greater(tf.shape(neg_hard)[-1],0),lambda:neg_hard[-1],lambda:1.)      # [k]
 

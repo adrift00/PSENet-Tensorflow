@@ -14,12 +14,12 @@ icdar2013 = DatasetConfig(
         }
 )
 icdar2015 = DatasetConfig(
-        file_pattern = 'icdar2015_%s.tfrecord', 
+        file_pattern = 'ic15_%s.tfrecord', 
         split_sizes = {
             'train': 1000,
             'test': 500
         },
-        dataset_dir='/home/lupu'
+        dataset_dir='/home/keyan/NewDisk/ZhangXiong/text_detection/psenet/ICDAR2015'
 )
 ic15mlt = DatasetConfig(
         file_pattern = 'ic15mlt_%s.tfrecord', 

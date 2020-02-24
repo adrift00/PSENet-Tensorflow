@@ -1,9 +1,9 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-import sys;sys.path.insert(0,'/workspace/lupu/PSENet/metric')
+#!/usr/bin/env python # -*- coding: utf-8 -*-
 from collections import namedtuple
-import rrc_evaluation_funcs
+import metric.rrc_evaluation_funcs as rrc_evaluation_funcs
 import importlib
+import numpy as np
+import Polygon as plg
 
 
 def evaluation_imports():
@@ -145,6 +145,7 @@ def evaluate_method(gtFilePath, submFilePath, evaluationParams):
     
     gt = rrc_evaluation_funcs.load_zip_file(gtFilePath,evaluationParams['GT_SAMPLE_NAME_2_ID'])
     subm = rrc_evaluation_funcs.load_zip_file(submFilePath,evaluationParams['DET_SAMPLE_NAME_2_ID'],True)
+    
    
     numGlobalCareGt = 0;
     numGlobalCareDet = 0;

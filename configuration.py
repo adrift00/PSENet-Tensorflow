@@ -7,17 +7,16 @@
 
 TRAIN_CONFIG={
     'profile':False,
-
     'train_image_shape':(640,640),
     'data_format':'NHWC',
     'use_rotation':False,
     'm':0.5,
-    'n':2,
+    'n':2, # kernel??????0.5?1 ??????
     'OHM':True,
 
     'weight_decay':5e-4,
 
-    'batch_size':8,
+    'batch_size':4,
 
     'log_dir':'Logs',
 
@@ -48,7 +47,7 @@ TEST_CONFIG ={
 
     'log_dir': 'Logs',
     # TODO your path here
-    'test_dir': '/workspace/datasets/icdar2015/ch4_test_images',
+    'test_dir': '/home/keyan/NewDisk/ZhangXiong/text_detection/psenet/ICDAR2015/test_images',
 
     'n':len(TRAIN_CONFIG['rate'])+1,
     'threshold_kernel': 0.6,

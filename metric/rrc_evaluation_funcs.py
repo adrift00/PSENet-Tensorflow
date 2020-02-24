@@ -8,6 +8,7 @@ import os
 import codecs
 import importlib
 from io import StringIO
+import operator
 
 def print_help():
     sys.stdout.write('Usage: python %s.py -g=<gtFile> -s=<submFile> [-o=<outputFolder> -p=<jsonParams>]' %sys.argv[0])
@@ -330,6 +331,14 @@ def main_evaluation(p,default_evaluation_params_fn,validate_data_fn,evaluate_met
         if per_sample == True:
             for k,v in evalData['per_sample'].items():
                 outZip.writestr( k + '.json',json.dumps(v)) 
+            # write for debug 
+            hmean={}
+            for k,v in evalData['per_sample'].items():
+                hmean[k]=v['hmean']
+            sorted_res=sorted(hmean.items(),key=operator.itemgetter(1))
+            out_file=p['o']+'/f1_score.json'
+            json.dump(sorted_res,open(out_file,'w'),indent=4)
+
 
             if 'output_items' in list(evalData.keys()):
                 for k, v in evalData['output_items'].items():

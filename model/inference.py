@@ -26,6 +26,7 @@ from PIL import Image
 from dataset import preprocess
 from PSE_C import mylib
 from skimage.measure import label, regionprops
+from metric import rrc_evaluation_funcs
 
 slim = tf.contrib.slim
 
@@ -139,7 +140,7 @@ def region_to_bbox(mask, image_size, min_height=10, min_area=300):
     score_map = (mask*255).astype(np.uint8)
 
     # NOTE TypeError: Layout of the output array incompatible with cv::Mat
-    _, contours, _ = cv2.findContours(
+    contours, _ = cv2.findContours(
         score_map.copy(), mode=cv2.RETR_CCOMP, method=cv2.CHAIN_APPROX_SIMPLE)
     # for bbox_contours in contours:
     rect = cv2.minAreaRect(contours[0])
@@ -204,7 +205,7 @@ def map_to_polys(segment_maps, result_map, image_size, aver_score=0.9):
     return polys,scores
 
 def map_to_bboxes(segment_maps, result_map, image_size, aver_score=0.9):
-    cc_num = result_map.max()  # this mean number of cc
+    cc_num = result_map.max()  # this mean number of cc 连通域个数，有几个文本对象
     bboxes = np.empty((0, 8))
     scores=np.empty((0,1))
     for i in range(1, cc_num+1):
@@ -254,7 +255,7 @@ def write_to_file(bboxes, image_name, output_dir,scores=None):
     # cv2.polylines(im[:, :, ::-1], [box.astype(np.int32).reshape((-1, 1, 2))], True, color=(255, 255, 0), thickness=3)
 
 
-def log_to_file(imgs_path,file_name,image_arr,bboxes,segment_maps):
+def log_to_file(imgs_path,file_name,image_arr,bboxes,segment_maps,gt):
     for i,seg_map in enumerate(segment_maps):
         # check file exits
         if os.path.isdir(imgs_path) == False:
@@ -263,10 +264,25 @@ def log_to_file(imgs_path,file_name,image_arr,bboxes,segment_maps):
         seg_map_3c=np.repeat(seg_map[0,:,:,:],3,2)*255
         att_im = cv2.addWeighted(seg_map_3c.astype(np.uint8), 0.5, image_arr, 0.5, 0.0)
         save_img=att_im if i==0 else np.concatenate((save_img,att_im),1)
-
     for poly in bboxes:
         poly=np.asarray([poly])
-        image_arr=cv2.polylines(image_arr,poly.astype(np.int).reshape([1,-1,2]),True,(0,255,0),thickness=2)
+        # import ipdb;ipdb.set_trace()
+        image_arr=cv2.polylines(image_arr,poly.astype(np.int).reshape([1,-1,2]),True,(0,0,255),thickness=1)
+    # write for gt
+    img_id=file_name.split('/')[-1][4:-4]
+    contents=rrc_evaluation_funcs.decode_utf8(gt[img_id])
+    lines=contents.split('\r\n')
+    # import ipdb;ipdb.set_trace()
+    for line in lines:
+        if line=='':
+            continue
+        line=line.split(',')
+        poly=np.array(line[0:8])
+        text=line[-1]
+        image_arr=cv2.polylines(image_arr,poly.astype(np.int).reshape([1,-1,2]),True,(0,255,0),thickness=1)
+        poly=poly.astype(np.int).reshape([1,-1,2])
+        cv2.putText(image_arr, text, (poly[0,0,0],poly[0,0,1]), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
+
     save_img=np.concatenate((save_img,image_arr),1)
 
     cv2.imwrite(img_path.replace('.jpg','_{}.png'.format(i)),save_img.astype(np.uint8))
@@ -368,6 +384,10 @@ def eval_model(config, FLAGS,para_list=None,is_log=False):
                 files_sorted = sorted(files, key=lambda path: int(
                     path.split('_')[-1].split('.')[0]))
             pbar = tqdm.tqdm(total=len(files_sorted))
+            # for gt 
+            if is_log:
+                gtFilePath='metric/gt.zip'
+                gt = rrc_evaluation_funcs.load_zip_file(gtFilePath,'gt_img_([0-9]+).txt')
             for iter, file_name in enumerate(files_sorted):
                 pbar.update(1)
                 # image_data = util.img.imread(
@@ -415,7 +435,7 @@ def eval_model(config, FLAGS,para_list=None,is_log=False):
                         segment_maps, result_map, image_size, aver_score=config['aver_score'])
 
                     if is_log:
-                        log_to_file(imgs_path,file_name,image_arr,bboxes,segment_maps)
+                        log_to_file(imgs_path,file_name,image_arr,bboxes,segment_maps,gt)
                     
                     write_to_file(bboxes, image_name, txt_path)
                 pbar_para.close()
@@ -452,7 +472,7 @@ def eval_model(config, FLAGS,para_list=None,is_log=False):
         para = {'g': 'gt.zip',
                 's': zip_path,
                 'o': infer_path}
-        import script
+        import metric.script as script
         func_name = 'script.eval(para)'
         try:
             res = eval(func_name)

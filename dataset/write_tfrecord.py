@@ -73,9 +73,8 @@ def ic15_cvt_to_tfrecords(output_file, data_path, gt_path):
 
         # write the serialized objec to the disk
         serialized = convert_to_example(
-            [image_data],list(shape), np.asanyarray(axs), np.asarray(ays), num_list, np.asarray(bboxes), labels_text, labels)
+            [image_data],list(shape), np.asanyarray(axs), np.asarray(ays), num_list, np.asarray(bboxes), labels_text, labels) # labels_text: 文本 label: 是否没有文本，忽略
         writer.write(serialized)
-
     writer.close()
 
 # Each line has 32 values, representing xmin, ymin, xmax, ymax (of the circumsribed rectangle), pw1, ph1, ..., pw14, ph14.

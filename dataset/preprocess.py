@@ -140,16 +140,13 @@ def shrink(bboxes, rate, max_shr=20):
     for bbox in bboxes:
         area = plg.Polygon(bbox).area()
         peri = perimeter(bbox)
-
         pco = pyclipper.PyclipperOffset()
         pco.AddPath(bbox, pyclipper.JT_ROUND, pyclipper.ET_CLOSEDPOLYGON)
         offset = min((int)(area * (1 - rate) / (peri + 0.001) + 0.5), max_shr)
-        
         shrinked_bbox = pco.Execute(-offset)
         if len(shrinked_bbox) == 0:
             shrinked_bboxes.append(bbox)
             continue
-        
         shrinked_bbox = np.array(shrinked_bbox[0])
         if shrinked_bbox.shape[0] <= 2:
             shrinked_bboxes.append(bbox)
@@ -160,13 +157,14 @@ def shrink(bboxes, rate, max_shr=20):
     return np.array(shrinked_bboxes)
 
 
-def process_data_np(image, label, bboxes):
+def process_data_np(image, label, bboxes): # input one image, label for ignore or not and polys
     # FIXME the mine size ??
     img = random_scale(image, config['min_size'],config['ran_scale'])
 
     gt_text = np.zeros(img.shape[0:2], dtype='uint8')
     training_mask = np.ones(img.shape[0:2], dtype='uint8')
     if bboxes.shape[0] > 0:
+        # ??
         bboxes = np.reshape(bboxes * ([img.shape[1], img.shape[0]] * 4), (bboxes.shape[0], int(bboxes.shape[1] / 2), 2)).astype(np.int32)
         # print(bboxes)
         for i in range(bboxes.shape[0]):
@@ -200,7 +198,7 @@ def process_data_np(image, label, bboxes):
     # img = transforms.ColorJitter(brightness = 32.0 / 255, saturation = 0.5)(img)
     img=np.asarray(img)
 
-    return img,gt_text,gt_kernals,training_mask
+    return img,gt_text,gt_kernals,training_mask # gt_text: 每个物体的编号不同，gt_kernels: 不同大小的kernel train_mask: 没有标签为0，不训练
 
 def process_data_tf(image, label, polys, num_points, bboxes):
     # TODO: the images are normalized using the channel means and standard deviations
