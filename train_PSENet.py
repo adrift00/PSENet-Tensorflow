@@ -13,7 +13,7 @@ from tensorflow.python.client import timeline
 import util
 from configuration import TRAIN_CONFIG
 from dataset.dataloader import DataLoader
-from model.loss import loss
+from model.loss import loss_with_thresh
 from model.model_v2 import model,model_deconv
 
 slim = tf.contrib.slim
@@ -39,16 +39,16 @@ os.environ['CUDA_VISIBLE_DEVICES'] = FLAGS.gpus
 num_gpu=len(FLAGS.gpus.split(','))
 checkpoint_path=os.path.join(TRAIN_CONFIG['log_dir'],'train',FLAGS.run_name)
 
-def tower_loss(scope, images, labels,kernals,training_mask):
+def tower_loss(scope, images, labels,kernals,training_mask,gt_thresh,thresh_mask):
     # Build inference Graph.
-    pred_gts,_ = model(images)
+    pred_gts,thresh_map,binary_map,_ = model(images)
 
     # Build the portion of the Graph calculating the losses. Note that we will
     # assemble the total_loss using a custom function below.
-    _ = loss(pred_gts, labels,kernals,training_mask)
+    _ = loss_with_thresh(pred_gts, labels,kernals,training_mask,thresh_map,binary_map,gt_thresh,thresh_mask)
 
     # Assemble all of the losses for the current tower only.
-    losses = tf.get_collection('losses', scope)
+    losses = tf.compat.v1.get_collection('losses', scope)
 
     # Calculate the total loss for the current tower.
     total_loss = tf.add_n(losses, name='total_loss')
@@ -56,15 +56,15 @@ def tower_loss(scope, images, labels,kernals,training_mask):
     # Remove 'tower_[0-9]/' from the name in case this is a multi-GPU training
     # session. This helps the clarity of presentation on tensorboard.
     loss_name = re.sub('%s_[0-9]*/' % 'TOWER', '', total_loss.op.name)
-    tf.summary.scalar(loss_name, total_loss)
+    tf.compat.v1.summary.scalar(loss_name, total_loss)
 
-    tf.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','',pred_gts.op.name),tf.expand_dims(pred_gts[:,0,:,:],-1))
-    tf.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','',labels.op.name), tf.expand_dims(labels[:,:,:],-1))
+    tf.compat.v1.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','',pred_gts.op.name),tf.expand_dims(pred_gts[:,0,:,:],-1))
+    tf.compat.v1.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','',labels.op.name), tf.expand_dims(labels[:,:,:],-1))
     for i in range(len(TRAIN_CONFIG['rate'])):    
-        tf.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','%d_'%i,pred_gts.op.name),tf.expand_dims(pred_gts[:,i+1,:,:],-1))
-        tf.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','%d_'%i,labels.op.name), tf.expand_dims(kernals[:,i,:,:],-1))
-    tf.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','',images.op.name), images)
-    tf.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','',training_mask.op.name), tf.expand_dims(training_mask,-1))
+        tf.compat.v1.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','%d_'%i,pred_gts.op.name),tf.expand_dims(pred_gts[:,i+1,:,:],-1))
+        tf.compat.v1.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','%d_'%i,labels.op.name), tf.expand_dims(kernals[:,i,:,:],-1))
+    tf.compat.v1.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','',images.op.name), images)
+    tf.compat.v1.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','',training_mask.op.name), tf.expand_dims(training_mask,-1))
     return total_loss
 
 
@@ -113,43 +113,43 @@ def main(argv=None):
 
     # NOTE: global_step is a special variable, can't create by below
     # global_step = tf.Variable(0,trainable=False)
-    global_step=tf.train.create_global_step()
+    global_step=tf.compat.v1.train.create_global_step()
     # NOTE: change lr accodring to epoch
     lr_config=TRAIN_CONFIG['lr_config']
     num_batches_per_epoch = \
         int(data_size['train'] / TRAIN_CONFIG['batch_size'])
     lr_boundaries = [int(e * num_batches_per_epoch) for e in lr_config['lr_boundaries']]
-    lr=tf.train.piecewise_constant(global_step,lr_boundaries,lr_config['lr_values'])
+    lr=tf.compat.v1.train.piecewise_constant(global_step,lr_boundaries,lr_config['lr_values'])
     with tf.name_scope('optimter'):
-        opt = tf.train.MomentumOptimizer(
+        opt = tf.compat.v1.train.MomentumOptimizer(
             learning_rate=lr, momentum=0.99)
-    tf.summary.scalar('learning_rate',lr)
+    tf.compat.v1.summary.scalar('learning_rate',lr)
     # multi GPUs reference from tf/model/cifer10
     # Calculate the gradients for each model tower.
     tower_grads = []
     reuse_variables=None
     # FIXME when use multi GPU, crashed with segment fault
-    with tf.variable_scope(tf.get_variable_scope()):
+    with tf.compat.v1.variable_scope(tf.compat.v1.get_variable_scope()):
         for i in range(num_gpu):
             with tf.device('/gpu:%d' % i):
                 print('/gpu:%d' % int(FLAGS.gpus.split(',')[i]))
                 with tf.name_scope('%s_%d' % ('TOWER', i)) as scope:
                     # Dequeues one batch for the GPU
-                    image,gt_text,gt_kernals,training_mask = dataloader.load_data()
+                    image,gt_text,gt_kernals,training_mask , gt_thresh,thresh_mask= dataloader.load_data()
 
-                    loss = tower_loss(scope, image, gt_text,gt_kernals,training_mask)
+                    loss = tower_loss(scope, image, gt_text,gt_kernals,training_mask,gt_thresh,thresh_mask)
                     # Reuse variables for the next tower.
-                    tf.get_variable_scope().reuse_variables()
+                    tf.compat.v1.get_variable_scope().reuse_variables()
 
                     # Retain the summaries from the final tower.
-                    summaries = tf.get_collection(tf.GraphKeys.SUMMARIES, scope)
+                    summaries = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.SUMMARIES, scope)
 
                     # just for summary
                     loss_sum=loss if i==0 else (loss_sum+loss)
 
                     # gather regularization loss and add to tower_0 only
                     if i == 0:
-                        # regularization_loss = tf.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+                        # regularization_loss = tf.add_n(tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.REGULARIZATION_LOSSES))
                         # If no loss_filter_fn is passed, assume we want the default behavior,
                         # which is that batch_normalization variables are excluded from loss.
                         def exclude_batch_norm(name):
@@ -159,11 +159,11 @@ def main(argv=None):
                         # Add weight decay to the loss.
                         l2_loss = weight_decay * tf.add_n(
                             # loss is computed using fp32 for numerical stability.
-                            [tf.nn.l2_loss(tf.cast(v, tf.float32)) for v in tf.trainable_variables()
+                            [tf.nn.l2_loss(tf.cast(v, tf.float32)) for v in tf.compat.v1.trainable_variables()
                              if exclude_batch_norm(v.name)])
 
                         loss = loss + l2_loss
-                        tf.summary.scalar('regularztion_loss',loss)
+                        tf.compat.v1.summary.scalar('regularztion_loss',loss)
 
                     # Calculate the gradients for the batch of data on this CIFAR tower.
                     grads = opt.compute_gradients(loss)
@@ -171,15 +171,19 @@ def main(argv=None):
                     # Keep track of the gradients across all towers.
                     tower_grads.append(grads)
 
-    tf.summary.scalar('toatal_loss',loss_sum/int(num_gpu))
+    tf.compat.v1.summary.scalar('toatal_loss',loss_sum/int(num_gpu))
     # We must calculate the mean of each gradient. Note that this is the
     # synchronization point across all towers.
     grads = average_gradients(tower_grads)
+    # add clip norm
+    # for i, (g, v) in enumerate(grads):
+    #     if g is not None:
+    #         grads[i] = (tf.clip_by_norm(g, 10), v)  # clip gradients
 
     # Add histograms for gradients.
     for grad, var in grads:
         if grad is not None:
-            summaries.append(tf.summary.histogram(
+            summaries.append(tf.compat.v1.summary.histogram(
                 var.op.name + '/gradients', grad))
     
     apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
@@ -187,11 +191,11 @@ def main(argv=None):
     # tf.logging.info('using moving average in training, \
     #     with decay = %f'%(FLAGS.moving_average_decay))
     ema = tf.train.ExponentialMovingAverage(0.9999,global_step)
-    ema_op = ema.apply(tf.trainable_variables())
+    ema_op = ema.apply(tf.compat.v1.trainable_variables())
     ema_up_op=tf.group(ema_op)
 
     # TODO what if multi GPU used ??
-    update_ops=tf.get_collection(tf.GraphKeys.UPDATE_OPS)   
+    update_ops=tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)   
     batch_norm_updates_op = tf.group(*update_ops)
     with tf.control_dependencies([ema_up_op,apply_gradient_op, batch_norm_updates_op]):
         train_op = tf.no_op(name='train_op')
@@ -200,8 +204,8 @@ def main(argv=None):
         restore_fn = slim.assign_from_checkpoint_fn(
             "Logs/model/resnet_imagenet/model.ckpt-225207", slim.get_trainable_variables(), ignore_missing_vars=True)
 
-    saver = tf.train.Saver(max_to_keep=30,keep_checkpoint_every_n_hours=2.5)
-    summary_op = tf.summary.merge_all()
+    saver = tf.compat.v1.train.Saver(max_to_keep=30,keep_checkpoint_every_n_hours=2.5)
+    summary_op = tf.compat.v1.summary.merge_all()
     init_op = tf.global_variables_initializer()
 
     tfconfig = tf.ConfigProto(allow_soft_placement=True)
@@ -212,7 +216,7 @@ def main(argv=None):
     with tf.Session(config=tfconfig) as sess:
         # for key, value in tf.flags.FLAGS.__flags.items():
         flags_log=tf.app.flags.FLAGS.flag_values_dict()
-        trans_var = tf.get_collection('transform')
+        trans_var = tf.compat.v1.get_collection('transform')
         init_transform = tf.variables_initializer(trans_var)
         sess.run(init_transform)
         if FLAGS.restore:
@@ -227,9 +231,9 @@ def main(argv=None):
                 json.dump(log_json,f, indent=2)
         else:
             # delete the run log dir
-            if tf.gfile.Exists(checkpoint_path):
-                tf.gfile.DeleteRecursively(os.path.abspath(checkpoint_path))
-            tf.gfile.MkDir(checkpoint_path)
+            if tf.io.gfile.exists(checkpoint_path):
+                tf.io.gfile.rmtree(os.path.abspath(checkpoint_path))
+            tf.io.gfile.mkdir(checkpoint_path)
 
             with open(os.path.join(checkpoint_path, '%s-config.json'%datetime.datetime.now().strftime('%m_%d-%H_%M')), 'w') as f:
                 log_json={"flags":flags_log,"config":config}
@@ -240,7 +244,7 @@ def main(argv=None):
             if FLAGS.use_pretrain == True:
                 restore_fn(sess)
 
-        sum_writer = tf.summary.FileWriter(
+        sum_writer = tf.compat.v1.summary.FileWriter(
             checkpoint_path, graph=None)
 
         run_opts = tf.RunOptions(report_tensor_allocations_upon_oom = True)
@@ -280,15 +284,9 @@ def main(argv=None):
 
                 sum_writer.add_summary(summary, global_step=step)
                 print('step:{} epcho: {}, loss value: {}, {:.2f} seconds/step, {:.2f} examples/second'.format(
-                    step, step/num_batches_per_epoch, loss_s/num_gpu,avg_time_per_step,avg_examples_per_second))
-            
-            elif step%10==9:
-                _,loss_s = sess.run(
-                        [train_op,loss_sum],options=run_opts)
-                print('step:{} epcho: {}, loss value: {}'.format(
-                    step, step/num_batches_per_epoch, loss_s/num_gpu))
+                    step+1, step/num_batches_per_epoch, loss_s/num_gpu,avg_time_per_step,avg_examples_per_second))
             else:
                 _ = sess.run(train_op,options=run_opts)
 
 if __name__ == '__main__':
-    tf.app.run()
+    tf.compat.v1.app.run()

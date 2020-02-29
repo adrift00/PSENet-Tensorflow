@@ -10,6 +10,7 @@ import random
 import torch
 import pyclipper
 import Polygon as plg
+from shapely.geometry import Polygon
 import tensorflow as tf
 
 from configuration import TRAIN_CONFIG
@@ -163,10 +164,12 @@ def process_data_np(image, label, bboxes): # input one image, label for ignore o
 
     gt_text = np.zeros(img.shape[0:2], dtype='uint8')
     training_mask = np.ones(img.shape[0:2], dtype='uint8')
+
     if bboxes.shape[0] > 0:
         # ??
         bboxes = np.reshape(bboxes * ([img.shape[1], img.shape[0]] * 4), (bboxes.shape[0], int(bboxes.shape[1] / 2), 2)).astype(np.int32)
         # print(bboxes)
+        # import ipdb;ipdb.set_trace()
         for i in range(bboxes.shape[0]):
             cv2.drawContours(gt_text, [bboxes[i]], -1, i + 1, -1)
             if not label[i]:
@@ -180,15 +183,20 @@ def process_data_np(image, label, bboxes): # input one image, label for ignore o
             cv2.drawContours(gt_kernal, [kernal_bboxes[i]], -1, 1, -1)
         gt_kernals.append(gt_kernal)
 
+    # for threshord map
+    gt_thresh = np.zeros(img.shape[0:2], dtype=np.float32)
+    thresh_mask=np.zeros(img.shape[0:2],dtype=np.uint8)
+    for i in range(bboxes.shape[0]):
+        draw_border_map(bboxes[i],gt_thresh,thresh_mask,config['rate'][0]) # use the smallest ratio as the expand ratio
 
-    imgs = [img, gt_text, training_mask]
+    imgs = [img, gt_text, training_mask,gt_thresh,thresh_mask]
     imgs.extend(gt_kernals)
 
     imgs = random_horizontal_flip(imgs)
     imgs = random_rotate(imgs)
     imgs = random_crop(imgs, (640,640))
 
-    img, gt_text, training_mask, gt_kernals = imgs[0], imgs[1], imgs[2], imgs[3:]
+    img, gt_text, training_mask, gt_thresh,thresh_mask,gt_kernals = imgs[0], imgs[1], imgs[2], imgs[3],imgs[4],imgs[5:]
     
     gt_text[gt_text > 0] = 1
     gt_kernals = np.array(gt_kernals)
@@ -198,14 +206,19 @@ def process_data_np(image, label, bboxes): # input one image, label for ignore o
     # img = transforms.ColorJitter(brightness = 32.0 / 255, saturation = 0.5)(img)
     img=np.asarray(img)
 
-    return img,gt_text,gt_kernals,training_mask # gt_text: 每个物体的编号不同，gt_kernels: 不同大小的kernel train_mask: 没有标签为0，不训练
+    # cv2.imwrite('image.jpg',img[:,:,:])
+    # cv2.imwrite('gt.jpg',gt_text*255)
+    # cv2.imwrite('gt_thresh.jpg',gt_thresh[:,:]*255)
+    # cv2.imwrite('thresh_mask.jpg',thresh_mask[:,:]*255)
+    # cv2.imwrite('train_mask.jpg',training_mask[:,:]*255)
+    return img,gt_text,gt_kernals,training_mask,gt_thresh,thresh_mask # gt_text: 每个物体的编号不同，gt_kernels: 不同大小的kernel train_mask: 没有标签为0，不训练
 
 def process_data_tf(image, label, polys, num_points, bboxes):
     # TODO: the images are normalized using the channel means and standard deviations
     image = tf.identity(image, 'input_image')
 
-    img, gt_text, gt_kernals, training_mask = tf.py_func(process_data_np, [image, label, polys], [
-        tf.uint8, tf.uint8, tf.uint8, tf.uint8])
+    img, gt_text, gt_kernals, training_mask,gt_thresh,thresh_mask= tf.py_func(process_data_np, [image, label, polys], [
+        tf.uint8, tf.uint8, tf.uint8, tf.uint8,tf.float32,tf.uint8])
 
     # gt_kernals.set_shape([640,640,6])
     # training_mask.set_shape([640,640,1])
@@ -213,18 +226,22 @@ def process_data_tf(image, label, polys, num_points, bboxes):
     gt_text.set_shape([640,640])
     gt_kernals.set_shape([len(config['rate']),640,640])
     training_mask.set_shape([640,640])
+    gt_thresh.set_shape([640,640])
+    thresh_mask.set_shape([640,640])
 
-    img = tf.to_float(img)
-    gt_text = tf.to_float(gt_text)
-    gt_kernals = tf.to_float(gt_kernals)
-    training_mask = tf.to_float(training_mask)
+    img = tf.cast(img,tf.float32)
+    gt_text = tf.cast(gt_text,tf.float32)
+    gt_kernals = tf.cast(gt_kernals,tf.float32)
+    training_mask = tf.cast(training_mask,tf.float32)
+    gt_thresh=tf.cast(gt_thresh,tf.float32)
+    thresh_mask=tf.cast(thresh_mask,tf.float32)
 
     img = tf.image.random_brightness(img, max_delta=32. / 255.)
     img = tf.image.random_saturation(img, lower=0.5, upper=1.5)
 
     img = tf_image_whitened(img, [123., 117., 104.])
 
-    return img, gt_text, gt_kernals, training_mask
+    return img, gt_text, gt_kernals, training_mask,gt_thresh,thresh_mask
 
 def process_td_np(image, label,bboxes):
     # generate mask
@@ -374,3 +391,89 @@ def preprocess_for_eval(image,scale=1.0,out_shape=None, data_format='NHWC',
         if data_format == 'NCHW':
             image = tf.transpose(image, perm=(2, 0, 1))
         return image
+
+def draw_border_map(polygon, canvas, mask,shrink_ratio):
+    polygon = np.array(polygon)
+    assert polygon.ndim == 2
+    assert polygon.shape[1] == 2
+
+    polygon_shape = Polygon(polygon)
+    distance = polygon_shape.area * \
+        (1 - np.power(shrink_ratio, 2)) / polygon_shape.length
+    subject = [tuple(l) for l in polygon]
+    padding = pyclipper.PyclipperOffset()
+    padding.AddPath(subject, pyclipper.JT_ROUND,
+                    pyclipper.ET_CLOSEDPOLYGON)
+    padded_polygon = np.array(padding.Execute(distance)[0])
+    cv2.fillPoly(mask, [padded_polygon.astype(np.int32)], 1.0)
+
+    xmin = padded_polygon[:, 0].min()
+    xmax = padded_polygon[:, 0].max()
+    ymin = padded_polygon[:, 1].min()
+    ymax = padded_polygon[:, 1].max()
+    width = xmax - xmin + 1
+    height = ymax - ymin + 1
+
+    polygon[:, 0] = polygon[:, 0] - xmin
+    polygon[:, 1] = polygon[:, 1] - ymin
+
+    xs = np.broadcast_to(
+        np.linspace(0, width - 1, num=width).reshape(1, width), (height, width))
+    ys = np.broadcast_to(
+        np.linspace(0, height - 1, num=height).reshape(height, 1), (height, width))
+
+    distance_map = np.zeros(
+        (polygon.shape[0], height, width), dtype=np.float32)
+    for i in range(polygon.shape[0]):
+        j = (i + 1) % polygon.shape[0]
+        absolute_distance = calc_distance(xs, ys, polygon[i], polygon[j])
+        distance_map[i] = np.clip(absolute_distance / distance, 0, 1)
+    distance_map = distance_map.min(axis=0)
+
+    xmin_valid = min(max(0, xmin), canvas.shape[1] - 1)
+    xmax_valid = min(max(0, xmax), canvas.shape[1] - 1)
+    ymin_valid = min(max(0, ymin), canvas.shape[0] - 1)
+    ymax_valid = min(max(0, ymax), canvas.shape[0] - 1)
+    canvas[ymin_valid:ymax_valid + 1, xmin_valid:xmax_valid + 1] = np.fmax(
+        1 - distance_map[
+            ymin_valid-ymin:ymax_valid-ymax+height,
+            xmin_valid-xmin:xmax_valid-xmax+width],
+        canvas[ymin_valid:ymax_valid + 1, xmin_valid:xmax_valid + 1])
+
+def calc_distance(xs, ys, point_1, point_2):
+    '''
+    compute the distance from point to a line
+    ys: coordinates in the first axis
+    xs: coordinates in the second axis
+    point_1, point_2: (x, y), the end of the line
+    '''
+    height, width = xs.shape[:2]
+    square_distance_1 = np.square(
+        xs - point_1[0]) + np.square(ys - point_1[1])
+    square_distance_2 = np.square(
+        xs - point_2[0]) + np.square(ys - point_2[1])
+    square_distance = np.square(
+        point_1[0] - point_2[0]) + np.square(point_1[1] - point_2[1])
+
+    cosin = (square_distance - square_distance_1 - square_distance_2) / \
+        (2 * np.sqrt(square_distance_1 * square_distance_2))
+    square_sin = 1 - np.square(cosin)
+    square_sin = np.nan_to_num(square_sin)
+    result = np.sqrt(square_distance_1 * square_distance_2 *
+                        square_sin / square_distance)
+
+    result[cosin < 0] = np.sqrt(np.fmin(
+        square_distance_1, square_distance_2))[cosin < 0]
+    # self.extend_line(point_1, point_2, result)
+    return result
+
+def extend_line(point_1, point_2, result,shrink_ratio):
+    ex_point_1 = (int(round(point_1[0] + (point_1[0] - point_2[0]) * (1 + shrink_ratio))),
+                    int(round(point_1[1] + (point_1[1] - point_2[1]) * (1 + shrink_ratio))))
+    cv2.line(result, tuple(ex_point_1), tuple(point_1),
+                4096.0, 1, lineType=cv2.LINE_AA, shift=0)
+    ex_point_2 = (int(round(point_2[0] + (point_2[0] - point_1[0]) * (1 + shrink_ratio))),
+                    int(round(point_2[1] + (point_2[1] - point_1[1]) * (1 + shrink_ratio))))
+    cv2.line(result, tuple(ex_point_2), tuple(point_2),
+                4096.0, 1, lineType=cv2.LINE_AA, shift=0)
+    return ex_point_1, ex_point_2

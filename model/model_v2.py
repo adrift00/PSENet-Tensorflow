@@ -88,7 +88,7 @@ class ImagenetModel(resnet_model.Model):
 
 def unpool(inputs, fac=2,data_format='channels_last'):
     inputs=inputs if data_format=='channels_last' else tf.transpose(inputs,[0,2,3,1])
-    inputs=tf.image.resize_bilinear(inputs, size=[tf.shape(inputs)[1]*int(fac),  tf.shape(inputs)[2]*int(fac)])
+    inputs=tf.compat.v1.image.resize_bilinear(inputs, size=[tf.shape(inputs)[1]*int(fac),  tf.shape(inputs)[2]*int(fac)])
     return inputs if data_format=='channels_last' else tf.transpose(inputs,[0,3,1,2])
 
 def conv_layer(input,output_dep,filter_size,is_training=True,data_format='channels_first'):
@@ -161,11 +161,18 @@ def model(inputs,data_format='channels_first',is_training=True):
                 seg_maps = seg_map
             else:
                 seg_maps = tf.concat((seg_maps, seg_map), 1 if data_format == 'channels_first' else -1)
+        # thresh_map
+        thresh_map=tf.layers.conv2d(feat,1,1,data_format=data_format)
+        thresh_map=tf.sigmoid(unpool(thresh_map,4,data_format=data_format)) # thresh_map (n,1,h,w) seg_maps(n,c,h,w)
+        # the thresh_map is (n,1,h,w),need squeeze
+        thresh_map=tf.squeeze(thresh_map)
+        # differentiable binalization
+        binary_map=tf.math.reciprocal(1 + tf.exp(-config['k'] * (seg_maps[:,-1,:,:]-thresh_map))) # use the smallest kernel
 
         if is_training==False:
             with tf.variable_scope('format_change'):
                 seg_maps=tf.transpose(seg_maps,[0,2,3,1])
-        return seg_maps, f
+        return seg_maps,thresh_map,binary_map, f
 
 
 def model_deconv(inputs,data_format='channels_first',is_training=True):

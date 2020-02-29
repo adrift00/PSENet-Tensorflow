@@ -4,8 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 
-# import sys
-# sys.path.append('/workspace/lupu/PSENet_curve')
+
 import util
 from dataset.dataset_factory import datasets_map
 from dataset.preprocess import process_data_np,process_data_tf
@@ -46,16 +45,16 @@ class DataLoader(object):
 
         # example proto decode
         def _parse_function(example_proto):
-            keys_to_features = {'image': tf.FixedLenFeature([], tf.string),
-                                'shape': tf.FixedLenFeature([3], tf.int64),
-                                'xs': tf.VarLenFeature(tf.float32),
-                                'ys': tf.VarLenFeature(tf.float32),
-                                'num_points': tf.VarLenFeature(tf.int64),
-                                'bboxes': tf.VarLenFeature(tf.float32),
-                                'words': tf.VarLenFeature(tf.string),
-                                'labels': tf.VarLenFeature(tf.int64),
+            keys_to_features = {'image': tf.io.FixedLenFeature([], tf.string),
+                                'shape': tf.io.FixedLenFeature([3], tf.int64),
+                                'xs': tf.io.VarLenFeature(tf.float32),
+                                'ys': tf.io.VarLenFeature(tf.float32),
+                                'num_points': tf.io.VarLenFeature(tf.int64),
+                                'bboxes': tf.io.VarLenFeature(tf.float32),
+                                'words': tf.io.VarLenFeature(tf.string),
+                                'labels': tf.io.VarLenFeature(tf.int64),
                                 }
-            parsed_features = tf.parse_single_example(
+            parsed_features = tf.io.parse_single_example(
                 example_proto, keys_to_features)
 
             # some image is decode to 1 chanenl, so we need set the number of channel be 3
@@ -64,17 +63,17 @@ class DataLoader(object):
             image = tf.reshape(image, parsed_features['shape'])
 
             # convert to dense tensor, the num_points means the point's number of each bbox [n1,n2,n2]
-            num_points = tf.sparse_tensor_to_dense(
+            num_points = tf.sparse.to_dense(
                 parsed_features['num_points'], default_value=0)
             # BBOX data is actually dense, convert it to dense tensor
-            bboxes = tf.sparse_tensor_to_dense(
+            bboxes = tf.sparse.to_dense(
                 parsed_features['bboxes'], default_value=0)
             # Since information about shape is lost reshape it
             bboxes = tf.reshape(bboxes, [-1, 4])
 
-            x = tf.sparse_tensor_to_dense(
+            x = tf.sparse.to_dense(
                 parsed_features['xs'], default_value=0)
-            y = tf.sparse_tensor_to_dense(
+            y = tf.sparse.to_dense(
                 parsed_features['ys'], default_value=0)
             # the shape inormation lost in store, so we restore it
             xs = tf.reshape(x, shape=[-1, NUM_POINT, 1])
@@ -82,7 +81,7 @@ class DataLoader(object):
 
             polys = tf.concat((xs, ys), -1)
             polys = tf.reshape(polys, [-1, NUM_POINT*2])
-            label = tf.sparse_tensor_to_dense(
+            label = tf.sparse.to_dense(
                 parsed_features['labels'], default_value=0)
             return image, label, polys, num_points, bboxes
 
@@ -116,23 +115,28 @@ class DataLoader(object):
 
 
 if __name__ == '__main__':
-    import crash_on_ipy
     import os
     import tqdm
-    os.environ['CUDA_VISIBLE_DEVICES'] = '3'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 
-    dataset = DataLoader('ctw1500', 8, train=True)
+    dataset = DataLoader(config['data_name'], 1, train=True)
 
     data_get = dataset.load_data()
 
     tfconfig = tf.ConfigProto(allow_soft_placement=True)
     tfconfig.gpu_options.allow_growth = True
     with tf.Session(config=tfconfig) as sess:
-
         pbar = tqdm.tqdm(total=2000)
         for i in range(2000):
             pbar.update(1)
-            image, gt, gt_kernel, training_mask = sess.run(data_get)
+            image, gt, gt_kernel, training_mask ,gt_thresh,thresh_mask= sess.run(data_get)
+            import cv2
+            cv2.imwrite('image.jpg',image[0,:,:,:])
+            cv2.imwrite('gt.jpg',gt[0,:,:]*255)
+            cv2.imwrite('gt_thresh.jpg',gt_thresh[0,:,:]*255)
+            cv2.imwrite('thresh_mask.jpg',thresh_mask[0,:,:]*255)
+            cv2.imwrite('train_mask.jpg',training_mask[0,:,:]*255)
+            import ipdb;ipdb.set_trace()
 
         #     plt.figure(0)
         #     plt.imshow(image[0,:, :, :])

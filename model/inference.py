@@ -6,8 +6,7 @@ import json
 import os
 import queue
 import re
-import time
-
+import time 
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import timeline

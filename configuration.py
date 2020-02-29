@@ -11,12 +11,12 @@ TRAIN_CONFIG={
     'data_format':'NHWC',
     'use_rotation':False,
     'm':0.5,
-    'n':2, # kernel??????0.5?1 ??????
+    'n':2, 
     'OHM':True,
 
     'weight_decay':5e-4,
 
-    'batch_size':4,
+    'batch_size':2,
 
     'log_dir':'Logs',
 
@@ -25,6 +25,12 @@ TRAIN_CONFIG={
         'lr_values':[1e-3,1e-4,1e-5]
     },
     'deformable':False,
+    # loss weights
+    'complete_weight': 1,
+    'shrink_weight': 1,
+    'binary_weight': 1,
+    'thresh_weight': 3,
+    'k':50,
 
     # dataset name
     'data_name':'icdar2015',
@@ -50,10 +56,13 @@ TEST_CONFIG ={
     'test_dir': '/home/keyan/NewDisk/ZhangXiong/text_detection/psenet/ICDAR2015/test_images',
 
     'n':len(TRAIN_CONFIG['rate'])+1,
-    'threshold_kernel': 0.6,
-    'threshold': 0.55,
-    'aver_score': 0.89,
+    # 'threshold_kernel': 0.6,
+    # 'threshold': 0.55,
+    # 'aver_score': 0.89,
 
+    'threshold_kernel': 0.5,
+    'threshold': 0.5,
+    'aver_score': 0.8,
     'image_size': {
         'w':1280,   # 2240
         'h':768,   # 1280
