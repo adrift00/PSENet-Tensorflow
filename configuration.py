@@ -18,10 +18,12 @@ TRAIN_CONFIG={
 
     'batch_size':2,
 
+    'epoch': 300,
+
     'log_dir':'Logs',
 
     'lr_config':{
-        'lr_boundaries':[500,800],
+        'lr_boundaries':[100,200],
         'lr_values':[1e-3,1e-4,1e-5]
     },
     'deformable':False,
@@ -30,7 +32,7 @@ TRAIN_CONFIG={
     'shrink_weight': 1,
     'binary_weight': 1,
     'thresh_weight': 3,
-    'k':50,
+    'k': 1,
 
     # dataset name
     'data_name':'icdar2015',
@@ -56,13 +58,10 @@ TEST_CONFIG ={
     'test_dir': '/home/keyan/NewDisk/ZhangXiong/text_detection/psenet/ICDAR2015/test_images',
 
     'n':len(TRAIN_CONFIG['rate'])+1,
-    # 'threshold_kernel': 0.6,
-    # 'threshold': 0.55,
-    # 'aver_score': 0.89,
-
-    'threshold_kernel': 0.5,
+    'threshold_kernel': 0.55,
     'threshold': 0.5,
-    'aver_score': 0.8,
+    'aver_score': 0.9,
+
     'image_size': {
         'w':1280,   # 2240
         'h':768,   # 1280

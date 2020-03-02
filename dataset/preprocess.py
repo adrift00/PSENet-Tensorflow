@@ -189,6 +189,8 @@ def process_data_np(image, label, bboxes): # input one image, label for ignore o
     for i in range(bboxes.shape[0]):
         draw_border_map(bboxes[i],gt_thresh,thresh_mask,config['rate'][0]) # use the smallest ratio as the expand ratio
 
+
+    # gt_thresh = gt_thresh * (0.7 - 0.3) + 0.3
     imgs = [img, gt_text, training_mask,gt_thresh,thresh_mask]
     imgs.extend(gt_kernals)
 
@@ -196,14 +198,12 @@ def process_data_np(image, label, bboxes): # input one image, label for ignore o
     imgs = random_rotate(imgs)
     imgs = random_crop(imgs, (640,640))
 
-    img, gt_text, training_mask, gt_thresh,thresh_mask,gt_kernals = imgs[0], imgs[1], imgs[2], imgs[3],imgs[4],imgs[5:]
+    img, gt_text, training_mask, gt_thresh, thresh_mask, gt_kernals = imgs[0], imgs[1], imgs[2], imgs[3],imgs[4],imgs[5:]
     
     gt_text[gt_text > 0] = 1
     gt_kernals = np.array(gt_kernals)
 
     img = Image.fromarray(img)
-    # img = img.convert('RGB')
-    # img = transforms.ColorJitter(brightness = 32.0 / 255, saturation = 0.5)(img)
     img=np.asarray(img)
 
     # cv2.imwrite('image.jpg',img[:,:,:])
@@ -211,13 +211,16 @@ def process_data_np(image, label, bboxes): # input one image, label for ignore o
     # cv2.imwrite('gt_thresh.jpg',gt_thresh[:,:]*255)
     # cv2.imwrite('thresh_mask.jpg',thresh_mask[:,:]*255)
     # cv2.imwrite('train_mask.jpg',training_mask[:,:]*255)
-    return img,gt_text,gt_kernals,training_mask,gt_thresh,thresh_mask # gt_text: 每个物体的编号不同，gt_kernels: 不同大小的kernel train_mask: 没有标签为0，不训练
+    # cv2.imwrite('kernel.jpg',gt_kernals[0,:,:]*255)
+    # import ipdb;ipdb.set_trace()
+    # gt_text: 完整的标签，全部标记为1，gt_kernels: 不同大小的kernel train_mask: 没有标签为0，不训练
+    return img,gt_text,gt_kernals,training_mask,gt_thresh,thresh_mask 
 
 def process_data_tf(image, label, polys, num_points, bboxes):
     # TODO: the images are normalized using the channel means and standard deviations
     image = tf.identity(image, 'input_image')
 
-    img, gt_text, gt_kernals, training_mask,gt_thresh,thresh_mask= tf.py_func(process_data_np, [image, label, polys], [
+    img, gt_text, gt_kernals, training_mask, gt_thresh, thresh_mask= tf.py_func(process_data_np, [image, label, polys], [
         tf.uint8, tf.uint8, tf.uint8, tf.uint8,tf.float32,tf.uint8])
 
     # gt_kernals.set_shape([640,640,6])
@@ -241,7 +244,7 @@ def process_data_tf(image, label, polys, num_points, bboxes):
 
     img = tf_image_whitened(img, [123., 117., 104.])
 
-    return img, gt_text, gt_kernals, training_mask,gt_thresh,thresh_mask
+    return img, gt_text, gt_kernals, training_mask, gt_thresh, thresh_mask
 
 def process_td_np(image, label,bboxes):
     # generate mask

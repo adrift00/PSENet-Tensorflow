@@ -22,15 +22,16 @@ def cal_dice_loss(pred, gt):
     return dice_loss
 
 
-def calc_l1_loss(pred, gt,mask):
-    mask_sum=tf.reduce_sum(mask)
+def calc_l1_loss(pred, gt, mask):
+    mask_sum = tf.reduce_sum(mask)
     # mask_sum=tf.Print(mask_sum,['mask sum',mask_sum])
+
     def f():
         diff = tf.abs(pred-gt)
         loss = tf.reduce_sum(diff*mask)
-        loss=loss/mask_sum
+        loss = loss/mask_sum
         return loss
-    loss=tf.cond(tf.equal(mask_sum,0),lambda: mask_sum,f)
+    loss = tf.cond(tf.equal(mask_sum, 0), lambda: mask_sum, f)
     return loss
     # loss = tf.abs(pred - gt)
     # positive = loss * mask
@@ -65,7 +66,7 @@ def loss(pred_seg_maps, gt_map, kernels, training_mask):
         pred_text_map = pred_seg_maps[:, 0, :, :]
 
         # NOTE: the mask is pred_map, may try gt_map?
-        mask = tf.cast(tf.greater(pred_text_map*training_mask, 0.5),tf.float32)
+        mask = tf.cast(tf.greater(pred_text_map*training_mask, 0.5), tf.float32)
         pred_text_map = pred_text_map*training_mask
         gt_map = gt_map*training_mask
 
@@ -137,10 +138,10 @@ def loss_with_thresh(pred_seg_maps, gt_map, kernels, training_mask, thresh_map, 
         pred_text_map = pred_seg_maps[:, 0, :, :]
 
         # NOTE: the mask is pred_map, may try gt_map?
-        mask = tf.to_float(tf.greater(pred_text_map*training_mask, 0.5))
+        mask = tf.cast(tf.greater(pred_text_map*training_mask, 0.5),tf.float32)
         pred_text_map = pred_text_map*training_mask
         gt_map = gt_map*training_mask
-
+        # TODO: the kernels don't times the training_mask, maybe is a bug
         def online_hard_min(maps):
             pred_map, gt_map = maps
 
@@ -160,7 +161,8 @@ def loss_with_thresh(pred_seg_maps, gt_map, kernels, training_mask, thresh_map, 
             pred_ohm = pos_mask*pred_map+neg_hard_mask*neg_mask*pred_map
             return pred_ohm, gt_map
         if config['OHM']:
-            pred_maps, gt_maps = tf.map_fn(online_hard_min, (pred_text_map, gt_map)) # pred_text_map(n,h,w) gt_map(n,h,w)
+            pred_maps, gt_maps = tf.map_fn( online_hard_min, 
+                                           (pred_text_map, gt_map))  # pred_text_map(n,h,w) gt_map(n,h,w)
         else:
             pred_maps, gt_maps = pred_text_map, gt_map
         ohm_dice_loss = cal_dice_loss(pred_maps, gt_maps)
@@ -179,24 +181,27 @@ def loss_with_thresh(pred_seg_maps, gt_map, kernels, training_mask, thresh_map, 
             dice_loss = cal_dice_loss(pred_map, gt_map)
             dice_loss = tf.reduce_mean(dice_loss)
             # NOTE the paper is divide Ls by (n-1), I don't divide this for long time
-            # dice_loss=tf.Print(dice_loss,['shrink_lsos',dice_loss])
+            # dice_loss=tf.Print(dice_loss,['shrink_loss',dice_loss])
             tf.compat.v1.add_to_collection('losses', config['shrink_weight']*dice_loss/(n-1))
         # add dice loss for binary map and l1 loss for thresh map
-        if config['OHM']:
-            binary_map, gt_map = tf.map_fn(online_hard_min, (binary_map, kernels[:,0,:,:])) # use the smallest kernel
-        else:
-            binary_map, gt_map = binary_map, kernels[:,0,:,:] # use the smallest kernel
-        # import ipdb;ipdb.set_trace()
-        ohm_binary_loss = cal_dice_loss(binary_map, gt_map)
-        binary_loss = tf.reduce_mean(ohm_binary_loss)
-        # binary_loss=tf.Print(binary_loss,['binary_loss',binary_loss])
-        tf.compat.v1.add_to_collection('losses', config['binary_weight']*binary_loss)
         # thresh loss
         thresh_map = thresh_map*training_mask
         gt_thresh = gt_thresh*training_mask
-        thresh_loss=calc_l1_loss(thresh_map,gt_thresh,thresh_mask)
+        thresh_loss = calc_l1_loss(thresh_map, gt_thresh, thresh_mask)
         # thresh_loss=tf.Print(thresh_loss,['thresh_loss',thresh_loss])
-        tf.compat.v1.add_to_collection('losses',config['thresh_weight']*thresh_loss)
+        tf.compat.v1.add_to_collection('losses', config['thresh_weight']*thresh_loss)
+        # binary loss
+        binary_map = binary_map*training_mask*mask
+        gt_map = kernels[:, -1, :, :]*training_mask*mask # the last kernels is the smallest
+        # if config['OHM']:
+        #     binary_map, gt_map = tf.map_fn(online_hard_min, (binary_map, gt_map))  
+        # else:
+        #     binary_map, gt_map = binary_map, gt_map  
+        # import ipdb;ipdb.set_trace()
+        binary_loss = cal_dice_loss(binary_map, gt_map)
+        binary_loss = tf.reduce_mean(binary_loss)
+        # binary_loss=tf.Print(binary_loss,['binary_loss',binary_loss])
+        tf.compat.v1.add_to_collection('losses', config['binary_weight']*binary_loss)
     # The total loss is defined as the cross entropy loss plus all of the weight
     # decay terms (L2 loss).
     return tf.add_n(tf.compat.v1.get_collection('losses'), name='total_loss')

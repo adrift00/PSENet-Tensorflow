@@ -302,14 +302,17 @@ def eval_model(config, FLAGS,para_list=None,is_log=False):
             image,scale=scale,out_shape=out_shape)
 
         image_process = tf.expand_dims(image_process, 0)
-        seg_maps, _ = model(image_process, is_training=False)
+        seg_maps, thresh_map,binary_map,_ = model(image_process, is_training=False)
 
+        # import ipdb;ipdb.set_trace()
         # rescale seg_maps to origin size
         seg_map_list = []
         for i in range(config['n']):
             seg_map_list.append(tf.image.resize_images(seg_maps[:, :, :, i:i+1], [
                 tf.shape(image)[0],  tf.shape(image)[1]]))
-
+        # import ipdb;ipdb.set_trace()
+        thresh_map=tf.image.resize_images(tf.expand_dims(thresh_map,-1),[tf.shape(image)[0],tf.shape(image)[1]])
+        binary_map=tf.image.resize_images(tf.expand_dims(binary_map,-1),[tf.shape(image)[0],tf.shape(image)[1]])
         # choose the complete map as mask, apply to shrink map
         mask = tf.greater_equal(seg_map_list[0], config['threshold'])
         mask = tf.to_float(mask)
@@ -351,6 +354,8 @@ def eval_model(config, FLAGS,para_list=None,is_log=False):
             for i in range(config['n']):
                 tf.summary.image(
                     ('%d_' % i+seg_map_list[i].op.name), seg_map_list[i])
+            tf.summary.image('thresh_map',thresh_map)
+            tf.summary.image('binary_map',binary_map)
 
         summary = tf.summary.merge_all()
 
