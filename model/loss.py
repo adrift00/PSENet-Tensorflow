@@ -69,19 +69,21 @@ def calc_l1_loss(pred, gt, mask):
 
 
 def calc_BCE_loss(pred, gt):
-    eps=1e-7
+    eps = 1e-7
     positive_mask = gt
     negative_mask = (1-gt)
-    positive_num = tf.cast(tf.reduce_sum(positive_mask),tf.int32)
-    negative_num = tf.math.minimum(tf.cast(tf.reduce_sum(negative_mask),tf.int32),tf.cast(positive_num*3,tf.int32))
-    loss=-gt*tf.math.log(tf.clip_by_value(pred,eps,1))-(1-gt)*tf.math.log(tf.clip_by_value(1-pred,eps,1))
-    positive_loss=loss*positive_mask
-    negative_loss=loss*negative_mask
-    negative_loss,_=tf.nn.top_k(tf.reshape(negative_loss,[-1]),negative_num)
+    positive_num = tf.cast(tf.reduce_sum(positive_mask), tf.int32)
+    negative_num = tf.math.minimum(tf.cast(tf.reduce_sum(negative_mask), tf.int32), tf.cast(positive_num*3, tf.int32))
+    loss = -gt*tf.math.log(tf.clip_by_value(pred, eps, 1))-(1-gt)*tf.math.log(tf.clip_by_value(1-pred, eps, 1))
+    positive_loss = loss*positive_mask
+    negative_loss = loss*negative_mask
+    negative_loss, _ = tf.nn.top_k(tf.reshape(negative_loss, [-1]), negative_num)
     # positive_loss=tf.Print(positive_loss,['positive_loss',positive_loss])
     # negative_loss=tf.Print(negative_loss,['negative_loss',negative_loss])
-    balance_loss=(tf.reduce_sum(positive_loss)+tf.reduce_sum(negative_loss))/(tf.cast(positive_num+negative_num,tf.float32)+eps)
+    balance_loss = (tf.reduce_sum(positive_loss)+tf.reduce_sum(negative_loss)) / \
+        (tf.cast(positive_num+negative_num, tf.float32)+eps)
     return balance_loss
+
 
 def loss(pred_seg_maps, gt_map, kernels, training_mask):
     '''
