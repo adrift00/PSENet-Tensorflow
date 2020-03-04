@@ -166,7 +166,6 @@ def process_data_np(image, label, bboxes): # input one image, label for ignore o
     training_mask = np.ones(img.shape[0:2], dtype='uint8')
 
     if bboxes.shape[0] > 0:
-        # ??
         bboxes = np.reshape(bboxes * ([img.shape[1], img.shape[0]] * 4), (bboxes.shape[0], int(bboxes.shape[1] / 2), 2)).astype(np.int32)
         # print(bboxes)
         # import ipdb;ipdb.set_trace()
@@ -190,7 +189,7 @@ def process_data_np(image, label, bboxes): # input one image, label for ignore o
         draw_border_map(bboxes[i],gt_thresh,thresh_mask,config['rate'][0]) # use the smallest ratio as the expand ratio
 
 
-    # gt_thresh = gt_thresh * (0.7 - 0.3) + 0.3
+    gt_thresh = gt_thresh * (0.7 - 0.3) + 0.3
     imgs = [img, gt_text, training_mask,gt_thresh,thresh_mask]
     imgs.extend(gt_kernals)
 

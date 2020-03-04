@@ -165,12 +165,9 @@ def model(inputs,data_format='channels_first',is_training=True):
         thresh_map=tf.layers.conv2d(feat,1,1,data_format=data_format)
         thresh_map=tf.sigmoid(unpool(thresh_map,4,data_format=data_format)) # thresh_map (n,1,h,w) seg_maps(n,c,h,w)
         # the thresh_map is (n,1,h,w),need squeeze
-        # import ipdb;ipdb.set_trace()
-        # thresh_map=tf.squeeze(thresh_map)
         thresh_map=thresh_map[:,0,:,:] # the thersh map only 1 channel
         # differentiable binalization
         binary_map=tf.math.reciprocal(1 + tf.exp(-config['k'] * (seg_maps[:,-1,:,:]-thresh_map))) # the last channel is the smallest kernel
-        # binary_map=tf.sigmoid(seg_maps[:,-1,:,:]-thresh_map)
 
         if is_training==False:
             with tf.variable_scope('format_change'):
