@@ -59,6 +59,10 @@ def tower_loss(scope, images, labels, kernels, training_mask, gt_thresh, thresh_
     # session. This helps the clarity of presentation on tensorboard.
     loss_name = re.sub('%s_[0-9]*/' % 'TOWER', '', total_loss.op.name)
     tf.compat.v1.summary.scalar(loss_name, total_loss)
+    tf.compat.v1.summary.scalar('comp_loss',losses[0]/TRAIN_CONFIG['complete_weight'])
+    tf.compat.v1.summary.scalar('shrink_loss',losses[1]/TRAIN_CONFIG['shrink_weight'])
+    tf.compat.v1.summary.scalar('thresh_loss',losses[2]/TRAIN_CONFIG['thresh_weight'])
+    tf.compat.v1.summary.scalar('binary_loss',losses[3]/TRAIN_CONFIG['binary_weight'])
 
     tf.compat.v1.summary.image(re.sub('%s_[0-9]*/' % 'TOWER', '', 'com_pred'), tf.expand_dims(pred_gts[:, 0, :, :], -1))
     tf.compat.v1.summary.image(re.sub('%s_[0-9]*/' % 'TOWER', '', 'gt_map'), tf.expand_dims(labels[:, :, :], -1))
