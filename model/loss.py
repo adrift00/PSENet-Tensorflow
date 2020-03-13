@@ -83,8 +83,8 @@ def loss(pred_seg_maps, gt_map, kernels, training_mask):
     The dice coefficient D(Si, Gi) is formulated as in Eqn
     '''
     with tf.name_scope('Loss'):
-        
-        n=config['n']
+
+        n = config['n']
         # for complete loss
         pred_text_map = pred_seg_maps[:, 0, :, :]
 
@@ -137,45 +137,46 @@ def loss_with_thresh(pred_seg_maps, gt_map, kernels, training_mask, thresh_map, 
     '''
     with tf.name_scope('Loss'):
 
-        n = len(config['rate'])+1
+        n = config['n']
         # for complete loss
-        pred_text_map = pred_seg_maps[:, 0, :, :]
+        # pred_text_map = pred_seg_maps[:, 0, :, :]
 
-        # NOTE: the mask is pred_map, may try gt_map?
-        mask = tf.cast(tf.greater(pred_text_map*training_mask, 0.5), tf.float32)
-        pred_text_map = pred_text_map*training_mask
-        gt_map = gt_map*training_mask
+        # # NOTE: the mask is pred_map, may try gt_map?
+        # mask = tf.cast(tf.greater(pred_text_map*training_mask, 0.5), tf.float32)
+        # pred_text_map = pred_text_map*training_mask
+        # gt_map = gt_map*training_mask
 
-        if config['OHM']:
-            pred_maps, gt_maps = tf.map_fn(online_hard_min,
-                                           (pred_text_map, gt_map))  # pred_text_map(n,h,w) gt_map(n,h,w)
-        else:
-            pred_maps, gt_maps = pred_text_map, gt_map
-        dice_loss = cal_dice_loss(pred_maps, gt_maps)
-        dice_loss = tf.reduce_mean(dice_loss)
-        # dice_loss=tf.Print(dice_loss,['comp_loss',dice_loss])
-        tf.compat.v1.add_to_collection('losses', config['complete_weight']*dice_loss)
+        # if config['OHM']:
+        #     pred_maps, gt_maps = tf.map_fn(online_hard_min,
+        #                                    (pred_text_map, gt_map))  # pred_text_map(n,h,w) gt_map(n,h,w)
+        # else:
+        #     pred_maps, gt_maps = pred_text_map, gt_map
+        # dice_loss = cal_dice_loss(pred_maps, gt_maps)
+        # dice_loss = tf.reduce_mean(dice_loss)
+        # # dice_loss=tf.Print(dice_loss,['comp_loss',dice_loss])
+        # tf.compat.v1.add_to_collection('losses', config['complete_weight']*dice_loss)
 
-        for i, _ in enumerate(config['rate']):
+        for i in range(config['n']-1): 
             # for shrink loss
-            pred_map = pred_seg_maps[:, i+1, :, :]*training_mask
+            # pred_map = pred_seg_maps[:, i+1, :, :]*training_mask
+            pred_map = pred_seg_maps[:, i, :, :]*training_mask # now no comp pred, so use i, the normal is i+1
             gt_map = kernels[:, i, :, :]*training_mask
 
-            # bce loss
-            # bce_loss = calc_BCE_loss(pred_map, gt_map)
-            # # bce_loss=tf.Print(bce_loss,['bce_loss',bce_loss])
-            # tf.compat.v1.add_to_collection('losses', config['shrink_weight']*bce_loss)
 
             # dice_loss
             if config['OHM']:
                 pred_map, gt_map = tf.map_fn(online_hard_min, (pred_map, gt_map))
             else:
-                pred_map = pred_map*mask
-                gt_map = gt_map*mask
-            dice_loss = cal_dice_loss(pred_map, gt_map)
-            dice_loss = tf.reduce_mean(dice_loss)
-            # dice_loss=tf.Print(dice_loss,['shrink_loss',dice_loss])
-            tf.compat.v1.add_to_collection('losses', config['shrink_weight']*dice_loss/(n-1))
+                pass
+                # pred_map,gt_map= pred_map*mask,gt_map*mask
+            # dice_loss = cal_dice_loss(pred_map, gt_map)
+            # dice_loss = tf.reduce_mean(dice_loss)
+            # # dice_loss=tf.Print(dice_loss,['shrink_loss',dice_loss])
+            # tf.compat.v1.add_to_collection('losses', config['shrink_weight']*dice_loss/(n-1))
+            # bce loss
+            bce_loss = calc_BCE_loss(pred_map, gt_map)
+            # bce_loss=tf.Print(bce_loss,['bce_loss',bce_loss])
+            tf.compat.v1.add_to_collection('losses', config['shrink_weight']*bce_loss)
 
         # add dice loss for binary map and l1 loss for thresh map
         # thresh loss
@@ -191,7 +192,8 @@ def loss_with_thresh(pred_seg_maps, gt_map, kernels, training_mask, thresh_map, 
         if config['OHM']:
             binary_map, gt_map = tf.map_fn(online_hard_min, (binary_map, gt_map))
         else:
-            binary_map, gt_map = binary_map*mask, gt_map*mask
+            pass
+            # binary_map, gt_map = binary_map*mask, gt_map*mask
 
         binary_loss = cal_dice_loss(binary_map, gt_map)
         binary_loss = tf.reduce_mean(binary_loss)

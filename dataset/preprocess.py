@@ -176,13 +176,7 @@ def process_data_np(image, label, bboxes):  # input one image, label for ignore 
     training_mask = np.ones(img.shape[0:2], dtype='uint8')
 
     if bboxes.shape[0] > 0:
-<<<<<<< HEAD
         bboxes = np.reshape(bboxes * ([img.shape[1], img.shape[0]] * 4), (bboxes.shape[0], int(bboxes.shape[1] / 2), 2)).astype(np.int32)
-=======
-        # ??
-        bboxes = np.reshape(bboxes * ([img.shape[1], img.shape[0]] * 4),
-                            (bboxes.shape[0], int(bboxes.shape[1] / 2), 2)).astype(np.int32)
->>>>>>> raw_pse
         # print(bboxes)
         # import ipdb;ipdb.set_trace()
         for i in range(bboxes.shape[0]):
@@ -199,37 +193,27 @@ def process_data_np(image, label, bboxes):  # input one image, label for ignore 
             cv2.drawContours(gt_kernal, [kernal_bboxes[i]], -1, 1, -1)
         gt_kernals.append(gt_kernal)
 
-<<<<<<< HEAD
     # for threshord map
     gt_thresh = np.zeros(img.shape[0:2], dtype=np.float32)
     thresh_mask=np.zeros(img.shape[0:2],dtype=np.uint8)
     for i in range(bboxes.shape[0]):
-        draw_border_map(bboxes[i],gt_thresh,thresh_mask,config['rate'][0]) # use the smallest ratio as the expand ratio
+        draw_border_map(bboxes[i],gt_thresh,thresh_mask) # use the smallest ratio as the expand ratio
 
 
     gt_thresh = gt_thresh * (0.7 - 0.3) + 0.3
     imgs = [img, gt_text, training_mask,gt_thresh,thresh_mask]
-=======
-    imgs = [img, gt_text, training_mask]
->>>>>>> raw_pse
     imgs.extend(gt_kernals)
 
     imgs = random_horizontal_flip(imgs)
     imgs = random_rotate(imgs)
     imgs = random_crop(imgs, (640, 640))
 
-<<<<<<< HEAD
     img, gt_text, training_mask, gt_thresh, thresh_mask, gt_kernals = imgs[0], imgs[1], imgs[2], imgs[3],imgs[4],imgs[5:]
     
-=======
-    img, gt_text, training_mask, gt_kernals = imgs[0], imgs[1], imgs[2], imgs[3:]
-
->>>>>>> raw_pse
     gt_text[gt_text > 0] = 1
     gt_kernals = np.array(gt_kernals)
 
     img = Image.fromarray(img)
-<<<<<<< HEAD
     img=np.asarray(img)
 
     # cv2.imwrite('image.jpg',img[:,:,:])
@@ -241,14 +225,6 @@ def process_data_np(image, label, bboxes):  # input one image, label for ignore 
     # import ipdb;ipdb.set_trace()
     # gt_text: 完整的标签，全部标记为1，gt_kernels: 不同大小的kernel train_mask: 没有标签为0，不训练
     return img,gt_text,gt_kernals,training_mask,gt_thresh,thresh_mask 
-=======
-    # img = img.convert('RGB')
-    # img = transforms.ColorJitter(brightness = 32.0 / 255, saturation = 0.5)(img)
-    img = np.asarray(img)
-
-    return img, gt_text, gt_kernals, training_mask  # gt_text: 每个物体的编号不同，gt_kernels: 不同大小的kernel train_mask: 没有标签为0，不训练
-
->>>>>>> raw_pse
 
 def process_data_tf(image, label, polys, num_points, bboxes):
     # TODO: the images are normalized using the channel means and standard deviations
@@ -259,19 +235,12 @@ def process_data_tf(image, label, polys, num_points, bboxes):
 
     # gt_kernals.set_shape([640,640,6])
     # training_mask.set_shape([640,640,1])
-<<<<<<< HEAD
     img.set_shape([640,640,3])
     gt_text.set_shape([640,640])
-    gt_kernals.set_shape([len(config['rate']),640,640])
+    gt_kernals.set_shape([config['n']-1,640,640])
     training_mask.set_shape([640,640])
     gt_thresh.set_shape([640,640])
     thresh_mask.set_shape([640,640])
-=======
-    img.set_shape([640, 640, 3])
-    gt_text.set_shape([640, 640])
-    gt_kernals.set_shape([config['n']-1, 640, 640])
-    training_mask.set_shape([640, 640])
->>>>>>> raw_pse
 
     img = tf.cast(img,tf.float32)
     gt_text = tf.cast(gt_text,tf.float32)
@@ -441,9 +410,9 @@ def preprocess_for_eval(image, scale=1.0, out_shape=None, data_format='NHWC',
         if data_format == 'NCHW':
             image = tf.transpose(image, perm=(2, 0, 1))
         return image
-<<<<<<< HEAD
 
-def draw_border_map(polygon, canvas, mask,shrink_ratio):
+def draw_border_map(polygon, canvas, mask):
+    shrink_ratio=config['m']
     polygon = np.array(polygon)
     assert polygon.ndim == 2
     assert polygon.shape[1] == 2
@@ -528,5 +497,3 @@ def extend_line(point_1, point_2, result,shrink_ratio):
     cv2.line(result, tuple(ex_point_2), tuple(point_2),
                 4096.0, 1, lineType=cv2.LINE_AA, shift=0)
     return ex_point_1, ex_point_2
-=======
->>>>>>> raw_pse

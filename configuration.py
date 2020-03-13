@@ -11,7 +11,7 @@ TRAIN_CONFIG = {
     'data_format': 'NHWC',
     'use_rotation': False,
     'm': 0.4,
-    'n': 7,
+    'n': 2,
     'OHM': True,
 
     'weight_decay': 5e-4,
@@ -28,10 +28,10 @@ TRAIN_CONFIG = {
     },
     'deformable': False,
     # loss weights
-    'complete_weight': 1,
-    'shrink_weight': 1,
+    # 'complete_weight': 1,
+    'shrink_weight': 5,
     'binary_weight': 1,
-    'thresh_weight': 5,
+    'thresh_weight': 10,
     'k': 50,
 
     # dataset name
