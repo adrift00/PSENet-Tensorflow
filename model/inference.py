@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import tqdm
 import util
 from dataset.dataloader import DataLoader
-from .model_v2 import model,model_deconv
+from .model_v2 import model, model_deconv
 from PIL import Image
 # from preprocessing import ssd_vgg_preprocessing
 from dataset import preprocess
@@ -71,6 +71,8 @@ def expansion_p(CC, Si):
 # NOTE implement by C++, so the divese will be fast
 # now it took 17ms
 # @time_it
+
+
 def expansion(CC, Si):
     def check(arr):
         if arr.shape[-1] == 1:
@@ -119,6 +121,8 @@ def rect_to_xys(rect, image_shape):
     return points
 
 # @time_it
+
+
 def process_map(segment_map, threshold_k=0.55, thershold=0.55):
     segment_map = [np.squeeze(seg, 0) for seg in segment_map]
     # First, binary the segment map, choose OTSU or other argrithem
@@ -126,10 +130,10 @@ def process_map(segment_map, threshold_k=0.55, thershold=0.55):
     S1 = (segment_map[-1]) > threshold_k  # (640,640)
     # get cc and label them with different number
     CC = label(S1, connectivity=2)
-
-    expand_cc=CC
+    expand_cc = CC
     # TODO 分割图使用相同排列顺序
-    for i in range(len(segment_map)-2,-1,-1):
+    for i in range(len(segment_map)-2, -1, -1):
+        # S_i = (segment_map[i]>thershold)*S
         S_i = segment_map[i] > thershold
         expand_cc = expansion(expand_cc, S_i)
     return expand_cc
@@ -157,7 +161,8 @@ def region_to_bbox(mask, image_size, min_height=10, min_area=300):
     # boxes.append(np.append(xys,1))
     return xys
 
-def region_to_poly(mask,image_size):
+
+def region_to_poly(mask, image_size):
     h, w = image_size
     score_map = (mask*255).astype(np.uint8)
 
@@ -176,19 +181,20 @@ def region_to_poly(mask,image_size):
     # if max(sw, sh) * 1.0 / min(sw, sh) < 2:
     #     return None
 
-    cnt=contours[0]
+    cnt = contours[0]
     # define main island contour approx. and hull
-    perimeter = cv2.arcLength(cnt,True)
-    epsilon = 0.01*cv2.arcLength(cnt,True)
-    approx = cv2.approxPolyDP(cnt,epsilon,True)
+    perimeter = cv2.arcLength(cnt, True)
+    epsilon = 0.01*cv2.arcLength(cnt, True)
+    approx = cv2.approxPolyDP(cnt, epsilon, True)
     # aprox [n_p,1,2]
-    xys=np.reshape(approx,[-1])
+    xys = np.reshape(approx, [-1])
     return xys
+
 
 def map_to_polys(segment_maps, result_map, image_size, aver_score=0.9):
     cc_num = result_map.max()  # this mean number of cc
     polys = []
-    scores=[]
+    scores = []
     for i in range(1, cc_num+1):
         # get each cc bounding
         mask = (result_map == i)
@@ -202,12 +208,13 @@ def map_to_polys(segment_maps, result_map, image_size, aver_score=0.9):
         if poly is not None:
             polys.append(poly.tolist())
             scores.append(region_score)
-    return polys,scores
+    return polys, scores
+
 
 def map_to_bboxes(segment_maps, result_map, image_size, aver_score=0.9):
     cc_num = result_map.max()  # this mean number of cc 连通域个数，有几个文本对象
     bboxes = np.empty((0, 8))
-    scores=np.empty((0,1))
+    scores = np.empty((0, 1))
     for i in range(1, cc_num+1):
         # get each cc bounding
         mask = (result_map == i)
@@ -221,16 +228,16 @@ def map_to_bboxes(segment_maps, result_map, image_size, aver_score=0.9):
         if bbox is not None:
             bboxes = np.concatenate(
                 (bboxes, bbox[np.newaxis, :]), axis=0)
-            scores=np.concatenate((scores,np.array([[region_score]])),0)
-    return bboxes,scores
+            scores = np.concatenate((scores, np.array([[region_score]])), 0)
+    return bboxes, scores
 
 
-def write_to_file(bboxes, image_name, output_dir,scores=None):
+def write_to_file(bboxes, image_name, output_dir, scores=None):
     ''' the socres is the average score of boundingbox region
     '''
     if os.path.isdir(output_dir) == False:
         os.makedirs(output_dir)
-    if isinstance(bboxes,list)==False:
+    if isinstance(bboxes, list) == False:
         bboxes = bboxes.tolist()
     # save to file
     filename = os.path.join(output_dir, 'res_%s.txt' % (image_name))
@@ -238,16 +245,16 @@ def write_to_file(bboxes, image_name, output_dir,scores=None):
     lines = []
     for b_idx, bbox in enumerate(bboxes):
         values = [int(v) for v in bbox]
-        line=''
+        line = ''
         if scores is None:
             for i in range(len(values)-1):
-                line+="%d,"%values[i]
-            line+="%d\r\n"%values[-1]
+                line += "%d," % values[i]
+            line += "%d\r\n" % values[-1]
         else:
             values.append(scores[b_idx])
             for i in range(len(values)-1):
-                line+="%d,"%values[i]
-            line+="%f\r\n"%values[-1]
+                line += "%d," % values[i]
+            line += "%f\r\n" % values[-1]
         lines.append(line)
     util.io.write_lines(filename, lines)
     # print( 'result has been written to:', filename)
@@ -255,39 +262,40 @@ def write_to_file(bboxes, image_name, output_dir,scores=None):
     # cv2.polylines(im[:, :, ::-1], [box.astype(np.int32).reshape((-1, 1, 2))], True, color=(255, 255, 0), thickness=3)
 
 
-def log_to_file(imgs_path,file_name,image_arr,bboxes,segment_maps,gt):
-    for i,seg_map in enumerate(segment_maps):
+def log_to_file(imgs_path, file_name, image_arr, bboxes, segment_maps, gt):
+    for i, seg_map in enumerate(segment_maps):
         # check file exits
         if os.path.isdir(imgs_path) == False:
             os.makedirs(imgs_path)
         img_path = os.path.join(imgs_path, os.path.basename(file_name))
-        seg_map_3c=np.repeat(seg_map[0,:,:,:],3,2)*255
+        seg_map_3c = np.repeat(seg_map[0, :, :, :], 3, 2)*255
         att_im = cv2.addWeighted(seg_map_3c.astype(np.uint8), 0.5, image_arr, 0.5, 0.0)
-        save_img=att_im if i==0 else np.concatenate((save_img,att_im),1)
+        save_img = att_im if i == 0 else np.concatenate((save_img, att_im), 1)
     for poly in bboxes:
-        poly=np.asarray([poly])
+        poly = np.asarray([poly])
         # import ipdb;ipdb.set_trace()
-        image_arr=cv2.polylines(image_arr,poly.astype(np.int).reshape([1,-1,2]),True,(0,0,255),thickness=1)
+        image_arr = cv2.polylines(image_arr, poly.astype(np.int).reshape([1, -1, 2]), True, (0, 0, 255), thickness=1)
     # write for gt
-    img_id=file_name.split('/')[-1][4:-4]
-    contents=rrc_evaluation_funcs.decode_utf8(gt[img_id])
-    lines=contents.split('\r\n')
+    img_id = file_name.split('/')[-1][4:-4]
+    contents = rrc_evaluation_funcs.decode_utf8(gt[img_id])
+    lines = contents.split('\r\n')
     # import ipdb;ipdb.set_trace()
     for line in lines:
-        if line=='':
+        if line == '':
             continue
-        line=line.split(',')
-        poly=np.array(line[0:8])
-        text=line[-1]
-        image_arr=cv2.polylines(image_arr,poly.astype(np.int).reshape([1,-1,2]),True,(0,255,0),thickness=1)
-        poly=poly.astype(np.int).reshape([1,-1,2])
-        cv2.putText(image_arr, text, (poly[0,0,0],poly[0,0,1]), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
+        line = line.split(',')
+        poly = np.array(line[0:8])
+        text = line[-1]
+        image_arr = cv2.polylines(image_arr, poly.astype(np.int).reshape([1, -1, 2]), True, (0, 255, 0), thickness=1)
+        poly = poly.astype(np.int).reshape([1, -1, 2])
+        cv2.putText(image_arr, text, (poly[0, 0, 0], poly[0, 0, 1]), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
 
-    save_img=np.concatenate((save_img,image_arr),1)
+    save_img = np.concatenate((save_img, image_arr), 1)
 
-    cv2.imwrite(img_path.replace('.jpg','_{}.png'.format(i)),save_img.astype(np.uint8))
+    cv2.imwrite(img_path.replace('.jpg', '_{}.png'.format(i)), save_img.astype(np.uint8))
 
-def eval_model(config, FLAGS,para_list=None,is_log=False):
+
+def eval_model(config, FLAGS, para_list=None, is_log=False):
     image_size = config['image_size']
     with tf.Graph().as_default():
         # image_ph = tf.placeholder(dtype=tf.uint8, shape=[
@@ -295,12 +303,12 @@ def eval_model(config, FLAGS,para_list=None,is_log=False):
         path_ph = tf.placeholder(dtype=tf.string)
 
         raw_data = tf.read_file(path_ph)
-        image = tf.image.decode_jpeg(raw_data,channels=3)
+        image = tf.image.decode_jpeg(raw_data, channels=3)
         image.set_shape((None, None, 3))
-        out_shape=(image_size['h'], image_size['w']) if image_size['fixed_size']==True else None
-        scale=1.0 if image_size['fixed_size']==True else image_size['scale']
-        image_process= preprocess.preprocess_for_eval(
-            image,scale=scale,out_shape=out_shape)
+        out_shape = (image_size['h'], image_size['w']) if image_size['fixed_size'] == True else None
+        scale = 1.0 if image_size['fixed_size'] == True else image_size['scale']
+        image_process = preprocess.preprocess_for_eval(
+            image, scale=scale, out_shape=out_shape)
 
         image_process = tf.expand_dims(image_process, 0)
         seg_maps, _ = model(image_process, is_training=False)
@@ -325,23 +333,23 @@ def eval_model(config, FLAGS,para_list=None,is_log=False):
         global_step = tf.train.get_or_create_global_step()
         # global_step = tf.Variable(0,trainable=False)
         # Variables to restore: moving avg. or normal weights.
-        
+
         if FLAGS.using_moving_average:
             variable_averages = tf.train.ExponentialMovingAverage(0.9999)
             variables_to_restore = variable_averages.variables_to_restore()
             variables_to_restore[global_step.op.name] = global_step
 
-            filter_variable={}
+            filter_variable = {}
             for var in variables_to_restore:
-                if var.find('deformable/Variable')==-1:
-                    filter_variable[var]=variables_to_restore[var]
+                if var.find('deformable/Variable') == -1:
+                    filter_variable[var] = variables_to_restore[var]
         else:
             # variables_to_restore = slim.get_variables_to_restore()
             variables_to_restore = tf.get_collection(
                 tf.GraphKeys.GLOBAL_VARIABLES)
-            filter_variable=[]
+            filter_variable = []
             for var in variables_to_restore:
-                if var.name.find('deformable/Variable')==-1:
+                if var.name.find('deformable/Variable') == -1:
                     filter_variable.append(var)
 
         saver = tf.train.Saver(filter_variable)
@@ -366,8 +374,8 @@ def eval_model(config, FLAGS,para_list=None,is_log=False):
             # ckpt='/workspace/lupu/PSENet/Logs/train/run_bat-b/model.ckpt-21579'
             # for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES):
             #     print(var)
-                # if var.name.find('BatchNorm')!=-1:
-                #   chkp.print_tensors_in_checkpoint_file(config['ckpt'], tensor_name=var.name.split(':')[0], all_tensors=False)
+            # if var.name.find('BatchNorm')!=-1:
+            #   chkp.print_tensors_in_checkpoint_file(config['ckpt'], tensor_name=var.name.split(':')[0], all_tensors=False)
 
             saver.restore(sess, config['ckpt'])
             print('restore model from: ', config['ckpt'])
@@ -384,10 +392,10 @@ def eval_model(config, FLAGS,para_list=None,is_log=False):
                 files_sorted = sorted(files, key=lambda path: int(
                     path.split('_')[-1].split('.')[0]))
             pbar = tqdm.tqdm(total=len(files_sorted))
-            # for gt 
+            # for gt
             if is_log:
-                gtFilePath='metric/gt.zip'
-                gt = rrc_evaluation_funcs.load_zip_file(gtFilePath,'gt_img_([0-9]+).txt')
+                gtFilePath = 'metric/gt.zip'
+                gt = rrc_evaluation_funcs.load_zip_file(gtFilePath, 'gt_img_([0-9]+).txt')
             for iter, file_name in enumerate(files_sorted):
                 pbar.update(1)
                 # image_data = util.img.imread(
@@ -406,7 +414,7 @@ def eval_model(config, FLAGS,para_list=None,is_log=False):
 
                     # segment_maps=(segment_maps>0.5).astype(np.float32)
 
-                    sum_writer.add_summary(summ,global_step=iter)
+                    sum_writer.add_summary(summ, global_step=iter)
                     # add mermory and time info in graph
                     sum_writer.add_run_metadata(run_metadata, 'step%d' % iter)
                 else:
@@ -414,13 +422,14 @@ def eval_model(config, FLAGS,para_list=None,is_log=False):
                     segment_maps = sess.run(
                         seg_map_list, feed_dict={path_ph: file_name})
 
-                para_list=[(config['threshold_kernel'],config['threshold'],config['aver_score'])] if para_list==None else para_list
-                
+                para_list = [(config['threshold_kernel'], config['threshold'],
+                              config['aver_score'])] if para_list == None else para_list
+
                 pbar_para = tqdm.tqdm(total=len(para_list))
-                for index,para in enumerate(para_list):
+                for index, para in enumerate(para_list):
                     pbar_para.update(1)
-                    config['threshold_kernel'],config['threshold'],config['aver_score']=para[0],para[1],para[2]
-                    config['id']=0 if len(para_list)==1 else index+1
+                    config['threshold_kernel'], config['threshold'], config['aver_score'] = para[0], para[1], para[2]
+                    config['id'] = 0 if len(para_list) == 1 else index+1
                     infer_path = util.io.join_path(
                         dump_path, chp_name+'_'+str(config['id']))
 
@@ -431,12 +440,12 @@ def eval_model(config, FLAGS,para_list=None,is_log=False):
                     result_map = process_map(
                         segment_maps, config['threshold_kernel'], config['threshold'])
 
-                    bboxes,scores = map_to_bboxes(
+                    bboxes, scores = map_to_bboxes(
                         segment_maps, result_map, image_size, aver_score=config['aver_score'])
 
                     if is_log:
-                        log_to_file(imgs_path,file_name,image_arr,bboxes,segment_maps,gt)
-                    
+                        log_to_file(imgs_path, file_name, image_arr, bboxes, segment_maps, gt)
+
                     write_to_file(bboxes, image_name, txt_path)
                 pbar_para.close()
                 # plt.show()
@@ -445,9 +454,9 @@ def eval_model(config, FLAGS,para_list=None,is_log=False):
     # ====================================
     # Logging .....
 
-    for index,para in enumerate(para_list):
-        config['threshold_kernel'],config['threshold'],config['aver_score']=para[0],para[1],para[2]
-        config['id']=config['id'] if len(para_list)==1 else index+1
+    for index, para in enumerate(para_list):
+        config['threshold_kernel'], config['threshold'], config['aver_score'] = para[0], para[1], para[2]
+        config['id'] = config['id'] if len(para_list) == 1 else index+1
         infer_path = util.io.join_path(
             dump_path, chp_name+'_'+str(config['id']))
 
@@ -462,8 +471,8 @@ def eval_model(config, FLAGS,para_list=None,is_log=False):
 
         cmd = 'cd %s;zip -j %s %s/*' % (infer_path,
                                         os.path.basename(zip_path), 'txt_result')
-        zip_path=util.io.get_absolute_path(zip_path)
-        infer_path=util.io.get_absolute_path(infer_path)
+        zip_path = util.io.get_absolute_path(zip_path)
+        infer_path = util.io.get_absolute_path(infer_path)
         # print(cmd)
         util.cmd.cmd(cmd)
         # print("zip file created: ", zip_path)

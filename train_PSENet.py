@@ -60,7 +60,7 @@ def tower_loss(scope, images, labels,kernals,training_mask):
 
     tf.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','',pred_gts.op.name),tf.expand_dims(pred_gts[:,0,:,:],-1))
     tf.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','',labels.op.name), tf.expand_dims(labels[:,:,:],-1))
-    for i in range(len(TRAIN_CONFIG['rate'])):    
+    for i in range(TRAIN_CONFIG['n']-1):    
         tf.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','%d_'%i,pred_gts.op.name),tf.expand_dims(pred_gts[:,i+1,:,:],-1))
         tf.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','%d_'%i,labels.op.name), tf.expand_dims(kernals[:,i,:,:],-1))
     tf.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','',images.op.name), images)
@@ -245,7 +245,7 @@ def main(argv=None):
 
         run_opts = tf.RunOptions(report_tensor_allocations_upon_oom = True)
         start = time.time()
-        for step in range(start_step, int(1200*data_size['train']/TRAIN_CONFIG['batch_size'])):
+        for step in range(start_step, int(TRAIN_CONFIG['epoch']*data_size['train']/TRAIN_CONFIG['batch_size'])):
             # for every 20 epoch and 5000 step to save model
             if step%(num_batches_per_epoch*SAVE_EPO)==num_batches_per_epoch*SAVE_EPO-1:
                 print("save the model at step:%d!"%step)
@@ -280,13 +280,8 @@ def main(argv=None):
 
                 sum_writer.add_summary(summary, global_step=step)
                 print('step:{} epcho: {}, loss value: {}, {:.2f} seconds/step, {:.2f} examples/second'.format(
-                    step, step/num_batches_per_epoch, loss_s/num_gpu,avg_time_per_step,avg_examples_per_second))
+                    step+1, step/num_batches_per_epoch, loss_s/num_gpu,avg_time_per_step,avg_examples_per_second))
             
-            elif step%10==9:
-                _,loss_s = sess.run(
-                        [train_op,loss_sum],options=run_opts)
-                print('step:{} epcho: {}, loss value: {}'.format(
-                    step, step/num_batches_per_epoch, loss_s/num_gpu))
             else:
                 _ = sess.run(train_op,options=run_opts)
 
