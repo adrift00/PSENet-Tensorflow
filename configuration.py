@@ -26,7 +26,7 @@ TRAIN_CONFIG = {
         'lr_boundaries': [200, 400],
         'lr_values': [1e-3, 1e-4, 1e-5]
     },
-    'deformable':False,
+    'deformable': False,
     # loss weights
     'complete_weight': 1,
     'shrink_weight': 1,
