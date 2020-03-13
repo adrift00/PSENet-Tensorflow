@@ -5,26 +5,26 @@
 
 # Config file for net and train
 
-TRAIN_CONFIG={
-    'profile':False,
-    'train_image_shape':(640,640),
-    'data_format':'NHWC',
-    'use_rotation':False,
-    'm':0.5,
-    'n':2, 
-    'OHM':True,
+TRAIN_CONFIG = {
+    'profile': False,
+    'train_image_shape': (640, 640),
+    'data_format': 'NHWC',
+    'use_rotation': False,
+    'm': 0.4,
+    'n': 7,
+    'OHM': True,
 
-    'weight_decay':5e-4,
+    'weight_decay': 5e-4,
 
-    'batch_size':4,
+    'batch_size': 6,
 
-    'epoch': 1200,
+    'log_dir': 'Logs',
 
-    'log_dir':'Logs',
+    'epoch': 600,
 
-    'lr_config':{
-        'lr_boundaries':[500,800],
-        'lr_values':[1e-3,1e-4,1e-5]
+    'lr_config': {
+        'lr_boundaries': [200, 400],
+        'lr_values': [1e-3, 1e-4, 1e-5]
     },
     'deformable':False,
     # loss weights
@@ -35,21 +35,20 @@ TRAIN_CONFIG={
     'k': 50,
 
     # dataset name
-    'data_name':'icdar2015',
-    'data_config':{
-        'read_num_p':2,
-        'para_num_p':2,
-        'pro_num_p':4,
-        'buffer_size':100,
-        'prefetch':50
+    'data_name': 'icdar2015',
+    'data_config': {
+        'read_num_p': 2,
+        'para_num_p': 2,
+        'pro_num_p': 4,
+        'buffer_size': 100,
+        'prefetch': 50
     },
-    'rate':[0.5],
 
-    'min_size':640,
-    'ran_scale':[0.5, 1.0, 2.0, 3.0]
+    'min_size': 640,
+    'ran_scale': [0.5, 1.0, 2.0, 3.0]
 }
 
-TEST_CONFIG ={
+TEST_CONFIG = {
     'id': '0',
     'ckpt': '',
 
@@ -57,18 +56,15 @@ TEST_CONFIG ={
     # TODO your path here
     'test_dir': '/home/keyan/NewDisk/ZhangXiong/text_detection/psenet/ICDAR2015/test_images',
 
-    'n':len(TRAIN_CONFIG['rate'])+1,
-    # 'threshold_kernel': 0.55,
-    # 'threshold': 0.5,
-    # 'aver_score': 0.9,
-    'threshold_kernel': 0.2,
-    'threshold': 0.5,
-    'aver_score': 0.9,
+    'n': TRAIN_CONFIG['n'],
+    'threshold_kernel': 0.55,
+    'threshold': 0.55,
+    'aver_score': 0.89,
 
     'image_size': {
-        'w':1280,   # 2240
-        'h':768,   # 1280
-        'fixed_size':False,
-        'scale':2
+        'w': 1280,   # 2240
+        'h': 768,   # 1280
+        'fixed_size': False,
+        'scale': 2
     }
 }

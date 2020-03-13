@@ -83,8 +83,8 @@ def loss(pred_seg_maps, gt_map, kernels, training_mask):
     The dice coefficient D(Si, Gi) is formulated as in Eqn
     '''
     with tf.name_scope('Loss'):
-
-        n = len(config['rate'])+1
+        
+        n=config['n']
         # for complete loss
         pred_text_map = pred_seg_maps[:, 0, :, :]
 
@@ -102,7 +102,7 @@ def loss(pred_seg_maps, gt_map, kernels, training_mask):
         dice_loss = tf.reduce_mean(ohm_dice_loss)
         tf.compat.v1.add_to_collection('losses', 0.7*dice_loss)
 
-        for i, _ in enumerate(config['rate']):
+        for i in range(config['n']-1):
             # for shrink loss
             pred_map = pred_seg_maps[:, i+1, :, :]
             gt_map = kernels[:, i, :, :]
