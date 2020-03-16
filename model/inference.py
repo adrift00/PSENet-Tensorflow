@@ -139,9 +139,13 @@ def process_map(segment_map, threshold_k=0.55, thershold=0.55):
     #     S_i = segment_map[i] > thershold
     #     expand_cc = expansion(expand_cc, S_i)
     # return expand_cc
-
-    segment_map = [np.squeeze(seg, 0) for seg in segment_map]
-    S1 = (segment_map[-1]) > threshold_k  # (640,640)
+    # segment_map = [np.squeeze(seg, 0) for seg in segment_map]
+    # import ipdb;ipdb.set_trace()
+    segment_map=np.squeeze(segment_map,0)
+    # cv2.imwrite('binary.png',segment_map*255)
+    S1 = (segment_map) > threshold_k  # (640,640)
+    # cv2.imwrite('after_binary.png',S1)
+    # import ipdb;ipdb.set_trace()
     # get cc and label them with different number
     kernel = label(S1, connectivity=2)
     # cv2.imwrite('kernel.png', (kernel*255).astype(np.uint8))
@@ -157,7 +161,7 @@ def process_map(segment_map, threshold_k=0.55, thershold=0.55):
             continue
         if points.shape[0] > 2:
             poly = Polygon(points)
-            distance = poly.area * 1.5 / poly.length
+            distance = poly.area * 2 / poly.length
             offset = pyclipper.PyclipperOffset()
             offset.AddPath(points, pyclipper.JT_ROUND, pyclipper.ET_CLOSEDPOLYGON)
             expand_bbox = np.array(offset.Execute(distance))
@@ -259,12 +263,18 @@ def map_to_bboxes(segment_maps, result_map, kernel_map,image_size, aver_score=0.
         # get each cc bounding
         mask = (result_map == i)
         score_mask=(kernel_map==i)
-        region_score = np.sum(
-            score_mask*np.squeeze(segment_maps[0], (0, -1)))/np.sum(score_mask)
         # import ipdb;ipdb.set_trace()
+        # region_score = np.sum(
+        #     score_mask*np.squeeze(segment_maps[0], (0, -1)))/np.sum(score_mask)
+        region_score = np.sum(
+            score_mask*np.squeeze(segment_maps, (0, -1)))/np.sum(score_mask)
         if region_score > aver_score:
-            bbox = region_to_bbox(
-                mask, (image_size['h'], image_size['w']))
+            # import ipdb;ipdb.set_trace()
+            if mask.sum()==0:
+                bbox=None
+            else:
+                bbox = region_to_bbox(
+                    mask, (image_size['h'], image_size['w']))
         else:
             bbox = None
         if bbox is not None:
@@ -450,8 +460,8 @@ def eval_model(config, FLAGS, para_list=None, is_log=False):
                         trace_level=tf.RunOptions.FULL_TRACE)
                     run_metadata = tf.RunMetadata()
                     # the input size must be  times 32(stride?)
-                    image_arr, segment_maps, summ = sess.run(
-                        [image, seg_map_list, summary], feed_dict={path_ph: file_name}, options=run_options, run_metadata=run_metadata)
+                    image_arr, segment_maps, binary,summ = sess.run(
+                        [image, seg_map_list, binary_map,summary], feed_dict={path_ph: file_name}, options=run_options, run_metadata=run_metadata)
 
                     # segment_maps=(segment_maps>0.5).astype(np.float32)
 
@@ -460,8 +470,8 @@ def eval_model(config, FLAGS, para_list=None, is_log=False):
                     sum_writer.add_run_metadata(run_metadata, 'step%d' % iter)
                 else:
                     # segment_maps is list
-                    segment_maps = sess.run(
-                        seg_map_list, feed_dict={path_ph: file_name})
+                    segment_maps, binary= sess.run(
+                        [seg_map_list,binary_map], feed_dict={path_ph: file_name})
 
                 para_list = [(config['threshold_kernel'], config['threshold'],
                               config['aver_score'])] if para_list == None else para_list
@@ -479,10 +489,10 @@ def eval_model(config, FLAGS, para_list=None, is_log=False):
                     imgs_path = util.io.join_path(infer_path, 'image_log')
 
                     result_map ,kernel_map= process_map(
-                        segment_maps, config['threshold_kernel'], config['threshold'])
+                        binary, config['threshold_kernel'], config['threshold'])
 
                     bboxes, scores = map_to_bboxes(
-                        segment_maps, result_map, kernel_map,image_size, aver_score=config['aver_score'])
+                        binary, result_map, kernel_map,image_size, aver_score=config['aver_score'])
 
                     if is_log:
                         log_to_file(imgs_path, file_name, image_arr, bboxes, segment_maps, gt)
