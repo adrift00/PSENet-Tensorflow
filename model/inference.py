@@ -6,7 +6,7 @@ import json
 import os
 import queue
 import re
-import time 
+import time
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import timeline
@@ -18,6 +18,9 @@ import cv2
 import matplotlib.pyplot as plt
 import tqdm
 import util
+import pyclipper
+import Polygon as plg
+from shapely.geometry import Polygon
 from dataset.dataloader import DataLoader
 from .model_v2 import model, model_deconv
 from PIL import Image
@@ -123,19 +126,55 @@ def rect_to_xys(rect, image_shape):
 
 
 def process_map(segment_map, threshold_k=0.55, thershold=0.55):
+    # segment_map = [np.squeeze(seg, 0) for seg in segment_map]
+    # # First, binary the segment map, choose OTSU or other argrithem
+    # # TODO 分割图使用相同排列顺序
+    # S1 = (segment_map[-1]) > threshold_k  # (640,640)
+    # # get cc and label them with different number
+    # CC = label(S1, connectivity=2)
+    # expand_cc = CC
+    # # TODO 分割图使用相同排列顺序
+    # for i in range(len(segment_map)-2, -1, -1):
+    #     # S_i = (segment_map[i]>thershold)*S
+    #     S_i = segment_map[i] > thershold
+    #     expand_cc = expansion(expand_cc, S_i)
+    # return expand_cc
+
     segment_map = [np.squeeze(seg, 0) for seg in segment_map]
-    # First, binary the segment map, choose OTSU or other argrithem
-    # TODO 分割图使用相同排列顺序
     S1 = (segment_map[-1]) > threshold_k  # (640,640)
     # get cc and label them with different number
-    CC = label(S1, connectivity=2)
-    expand_cc = CC
-    # TODO 分割图使用相同排列顺序
-    for i in range(len(segment_map)-2, -1, -1):
-        # S_i = (segment_map[i]>thershold)*S
-        S_i = segment_map[i] > thershold
-        expand_cc = expansion(expand_cc, S_i)
-    return expand_cc
+    kernel = label(S1, connectivity=2)
+    # cv2.imwrite('kernel.png', (kernel*255).astype(np.uint8))
+    # import ipdb;ipdb.set_trace()
+    contours, _ = cv2.findContours((kernel*255).astype(np.uint8), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+    kernel_map = np.zeros(kernel.shape[0:2], dtype=np.uint8)
+    expand_map = np.zeros(kernel.shape[0:2], dtype=np.uint8)
+    for i, contour in enumerate(contours):
+        epsilon = 0.01 * cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, epsilon, True)
+        points = approx.reshape((-1, 2))
+        if points.shape[0] < 4:
+            continue
+        if points.shape[0] > 2:
+            poly = Polygon(points)
+            distance = poly.area * 1.5 / poly.length
+            offset = pyclipper.PyclipperOffset()
+            offset.AddPath(points, pyclipper.JT_ROUND, pyclipper.ET_CLOSEDPOLYGON)
+            expand_bbox = np.array(offset.Execute(distance))
+            if len(expand_bbox) > 1:
+                continue
+        else:
+            continue
+        expand_bbox = expand_bbox.reshape((-1, 2))
+        if expand_bbox.shape[0]==0:
+            continue
+        # print(i)
+        # print(expand_bbox)
+        cv2.drawContours(kernel_map, [points], -1, i+1, -1)
+        cv2.drawContours(expand_map, [expand_bbox], -1, i+1, -1)
+    # cv2.imwrite('expand_map.png',expand_map*255)
+    # import ipdb;ipdb.set_trace()
+    return expand_map,kernel_map
 
 
 def region_to_bbox(mask, image_size, min_height=10, min_area=300):
@@ -210,15 +249,19 @@ def map_to_polys(segment_maps, result_map, image_size, aver_score=0.9):
     return polys, scores
 
 
-def map_to_bboxes(segment_maps, result_map, image_size, aver_score=0.9):
+def map_to_bboxes(segment_maps, result_map, kernel_map,image_size, aver_score=0.9):
     cc_num = result_map.max()  # this mean number of cc 连通域个数，有几个文本对象
+    # import ipdb
+    # ipdb.set_trace()
     bboxes = np.empty((0, 8))
     scores = np.empty((0, 1))
     for i in range(1, cc_num+1):
         # get each cc bounding
         mask = (result_map == i)
+        score_mask=(kernel_map==i)
         region_score = np.sum(
-            mask*np.squeeze(segment_maps[0], (0, -1)))/np.sum(mask)
+            score_mask*np.squeeze(segment_maps[0], (0, -1)))/np.sum(score_mask)
+        # import ipdb;ipdb.set_trace()
         if region_score > aver_score:
             bbox = region_to_bbox(
                 mask, (image_size['h'], image_size['w']))
@@ -310,17 +353,17 @@ def eval_model(config, FLAGS, para_list=None, is_log=False):
             image, scale=scale, out_shape=out_shape)
 
         image_process = tf.expand_dims(image_process, 0)
-        seg_maps, thresh_map,binary_map,_ = model(image_process, is_training=False)
+        seg_maps, thresh_map, binary_map, _ = model(image_process, is_training=False)
 
         # import ipdb;ipdb.set_trace()
         # rescale seg_maps to origin size
         seg_map_list = []
-        for i in range(config['n']):
+        for i in range(config['n']-1):
             seg_map_list.append(tf.image.resize_images(seg_maps[:, :, :, i:i+1], [
                 tf.shape(image)[0],  tf.shape(image)[1]]))
         # import ipdb;ipdb.set_trace()
-        thresh_map=tf.image.resize_images(tf.expand_dims(thresh_map,-1),[tf.shape(image)[0],tf.shape(image)[1]])
-        binary_map=tf.image.resize_images(tf.expand_dims(binary_map,-1),[tf.shape(image)[0],tf.shape(image)[1]])
+        thresh_map = tf.image.resize_images(tf.expand_dims(thresh_map, -1), [tf.shape(image)[0], tf.shape(image)[1]])
+        binary_map = tf.image.resize_images(tf.expand_dims(binary_map, -1), [tf.shape(image)[0], tf.shape(image)[1]])
         # choose the complete map as mask, apply to shrink map
         mask = tf.greater_equal(seg_map_list[0], config['threshold'])
         mask = tf.to_float(mask)
@@ -359,11 +402,11 @@ def eval_model(config, FLAGS, para_list=None, is_log=False):
         with tf.name_scope('debug'):
             # tf.summary.image('input',tf.expand_dims(image,0))
             tf.summary.image('process', image_process)
-            for i in range(config['n']):
+            for i in range(config['n']-1):
                 tf.summary.image(
                     ('%d_' % i+seg_map_list[i].op.name), seg_map_list[i])
-            tf.summary.image('thresh_map',thresh_map)
-            tf.summary.image('binary_map',binary_map)
+            tf.summary.image('thresh_map', thresh_map)
+            tf.summary.image('binary_map', binary_map)
 
         summary = tf.summary.merge_all()
 
@@ -374,12 +417,6 @@ def eval_model(config, FLAGS, para_list=None, is_log=False):
             trans_var = tf.get_collection('transform')
             init_transform = tf.variables_initializer(trans_var)
             sess.run(init_transform)
-
-            # ckpt='/workspace/lupu/PSENet/Logs/train/run_bat-b/model.ckpt-21579'
-            # for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES):
-            #     print(var)
-            # if var.name.find('BatchNorm')!=-1:
-            #   chkp.print_tensors_in_checkpoint_file(config['ckpt'], tensor_name=var.name.split(':')[0], all_tensors=False)
 
             saver.restore(sess, config['ckpt'])
             print('restore model from: ', config['ckpt'])
@@ -441,11 +478,11 @@ def eval_model(config, FLAGS, para_list=None, is_log=False):
                     zip_path = util.io.join_path(infer_path, 'detect.zip')
                     imgs_path = util.io.join_path(infer_path, 'image_log')
 
-                    result_map = process_map(
+                    result_map ,kernel_map= process_map(
                         segment_maps, config['threshold_kernel'], config['threshold'])
 
                     bboxes, scores = map_to_bboxes(
-                        segment_maps, result_map, image_size, aver_score=config['aver_score'])
+                        segment_maps, result_map, kernel_map,image_size, aver_score=config['aver_score'])
 
                     if is_log:
                         log_to_file(imgs_path, file_name, image_arr, bboxes, segment_maps, gt)

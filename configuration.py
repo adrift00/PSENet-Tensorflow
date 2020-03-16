@@ -57,9 +57,9 @@ TEST_CONFIG = {
     'test_dir': '/home/keyan/NewDisk/ZhangXiong/text_detection/psenet/ICDAR2015/test_images',
 
     'n': TRAIN_CONFIG['n'],
-    'threshold_kernel': 0.55,
-    'threshold': 0.55,
-    'aver_score': 0.89,
+    'threshold_kernel': 0.3,
+    'threshold': 0.3,
+    'aver_score': 0.7,
 
     'image_size': {
         'w': 1280,   # 2240
