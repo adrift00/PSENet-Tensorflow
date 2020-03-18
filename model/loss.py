@@ -33,10 +33,12 @@ def online_hard_min(maps):
 
 
 def cal_dice_loss(pred, gt):
-    union = tf.reduce_sum(tf.multiply(pred, gt), [1, 2])
-    pred_square = tf.reduce_sum(tf.square(pred), [1, 2])
-    gt_square = tf.reduce_sum(tf.square(gt), [1, 2])
-    dice_loss = 1.-(2*union+1e-5)/(pred_square+gt_square+1e-5)
+    # dice loss like bdnet,use sum for reduction
+    eps=1e-6
+    union = tf.reduce_sum(tf.multiply(pred, gt))
+    pred_square = tf.reduce_sum(pred) # the db_net don't have square
+    gt_square = tf.reduce_sum(gt)
+    dice_loss = 1.-(2.*union)/(pred_square+gt_square+eps)
 
     # dice_loss=tf.Print(dice_loss,[gt_square],message='gt_square: ',summarize=5)
     return dice_loss
@@ -70,56 +72,6 @@ def calc_BCE_loss(pred, gt):
         (tf.cast(positive_num+negative_num, tf.float32)+eps)
     return balance_loss
 
-
-def loss(pred_seg_maps, gt_map, kernels, training_mask):
-    '''
-    L = λLc + (1 − λ)Ls
-    where Lc and Ls represent the losses for the complete text instances and the shrunk ones respec- tively, 
-    and λ balances the importance between Lc and Ls
-    It is common that the text instances usually occupy only an extremely small region in natural images,
-    which makes the predictions of network bias to the non-text region, 
-    when binary cross entropy [2] is used. Inspired by [20], 
-    we adopt dice coefficient in our experiment. 
-    The dice coefficient D(Si, Gi) is formulated as in Eqn
-    '''
-    with tf.name_scope('Loss'):
-
-        n = config['n']
-        # for complete loss
-        pred_text_map = pred_seg_maps[:, 0, :, :]
-
-        # NOTE: the mask is pred_map, may try gt_map?
-        mask = tf.cast(tf.greater(pred_text_map*training_mask, 0.5), tf.float32)
-        pred_text_map = pred_text_map*training_mask
-        gt_map = gt_map*training_mask
-
-        if config['OHM']:
-            pred_maps, gt_maps = tf.map_fn(online_hard_min, (pred_text_map, gt_map))
-        else:
-            pred_maps, gt_maps = pred_text_map, gt_map
-        ohm_dice_loss = cal_dice_loss(pred_maps, gt_maps)
-
-        dice_loss = tf.reduce_mean(ohm_dice_loss)
-        tf.compat.v1.add_to_collection('losses', 0.7*dice_loss)
-
-        for i in range(config['n']-1):
-            # for shrink loss
-            pred_map = pred_seg_maps[:, i+1, :, :]
-            gt_map = kernels[:, i, :, :]
-
-            pred_map = pred_map*mask
-            gt_map = gt_map*mask
-
-            dice_loss = cal_dice_loss(pred_map, gt_map)
-            dice_loss = tf.reduce_mean(dice_loss)
-            # NOTE the paper is divide Ls by (n-1), I don't divide this for long time
-            tf.compat.v1.add_to_collection('losses', (1-0.7)*dice_loss/(n-1))
-
-    # The total loss is defined as the cross entropy loss plus all of the weight
-    # decay terms (L2 loss).
-    return tf.add_n(tf.compat.v1.get_collection('losses'), name='total_loss')
-
-
 def loss_with_thresh(pred_seg_maps, gt_map, kernels, training_mask, thresh_map, binary_map, gt_thresh, thresh_mask):
     '''
     L = λLc + (1 − λ)Ls
@@ -138,41 +90,12 @@ def loss_with_thresh(pred_seg_maps, gt_map, kernels, training_mask, thresh_map, 
     with tf.name_scope('Loss'):
 
         n = config['n']
-        # for complete loss
-        # pred_text_map = pred_seg_maps[:, 0, :, :]
-
-        # # NOTE: the mask is pred_map, may try gt_map?
-        # mask = tf.cast(tf.greater(pred_text_map*training_mask, 0.5), tf.float32)
-        # pred_text_map = pred_text_map*training_mask
-        # gt_map = gt_map*training_mask
-
-        # if config['OHM']:
-        #     pred_maps, gt_maps = tf.map_fn(online_hard_min,
-        #                                    (pred_text_map, gt_map))  # pred_text_map(n,h,w) gt_map(n,h,w)
-        # else:
-        #     pred_maps, gt_maps = pred_text_map, gt_map
-        # dice_loss = cal_dice_loss(pred_maps, gt_maps)
-        # dice_loss = tf.reduce_mean(dice_loss)
-        # # dice_loss=tf.Print(dice_loss,['comp_loss',dice_loss])
-        # tf.compat.v1.add_to_collection('losses', config['complete_weight']*dice_loss)
 
         for i in range(config['n']-1): 
             # for shrink loss
-            # pred_map = pred_seg_maps[:, i+1, :, :]*training_mask
             pred_map = pred_seg_maps[:, i, :, :]*training_mask # now no comp pred, so use i, the normal is i+1
             gt_map = kernels[:, i, :, :]*training_mask
 
-
-            # dice_loss
-            if config['OHM']:
-                pred_map, gt_map = tf.map_fn(online_hard_min, (pred_map, gt_map))
-            else:
-                pass
-                # pred_map,gt_map= pred_map*mask,gt_map*mask
-            # dice_loss = cal_dice_loss(pred_map, gt_map)
-            # dice_loss = tf.reduce_mean(dice_loss)
-            # # dice_loss=tf.Print(dice_loss,['shrink_loss',dice_loss])
-            # tf.compat.v1.add_to_collection('losses', config['shrink_weight']*dice_loss/(n-1))
             # bce loss
             bce_loss = calc_BCE_loss(pred_map, gt_map)
             # bce_loss=tf.Print(bce_loss,['bce_loss',bce_loss])
@@ -187,16 +110,10 @@ def loss_with_thresh(pred_seg_maps, gt_map, kernels, training_mask, thresh_map, 
         tf.compat.v1.add_to_collection('losses', config['thresh_weight']*thresh_loss)
 
         # binary loss
+        # NOTE: the binary dice loss is not use ohem.
         binary_map = binary_map*training_mask
         gt_map = kernels[:, -1, :, :]*training_mask  # the last kernels is the smallest
-        if config['OHM']:
-            binary_map, gt_map = tf.map_fn(online_hard_min, (binary_map, gt_map))
-        else:
-            pass
-            # binary_map, gt_map = binary_map*mask, gt_map*mask
-
         binary_loss = cal_dice_loss(binary_map, gt_map)
-        binary_loss = tf.reduce_mean(binary_loss)
         # binary_loss=tf.Print(binary_loss,['binary_loss',binary_loss])
         tf.compat.v1.add_to_collection('losses', config['binary_weight']*binary_loss)
     # The total loss is defined as the cross entropy loss plus all of the weight

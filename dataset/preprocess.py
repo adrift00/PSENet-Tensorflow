@@ -418,8 +418,7 @@ def draw_border_map(polygon, canvas, mask):
     assert polygon.shape[1] == 2
 
     polygon_shape = Polygon(polygon)
-    distance = polygon_shape.area * \
-        (1 - np.power(shrink_ratio, 2)) / polygon_shape.length
+    distance = polygon_shape.area * (1 - np.power(shrink_ratio, 2)) / polygon_shape.length
     subject = [tuple(l) for l in polygon]
     padding = pyclipper.PyclipperOffset()
     padding.AddPath(subject, pyclipper.JT_ROUND,

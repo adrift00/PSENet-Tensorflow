@@ -14,18 +14,20 @@ TRAIN_CONFIG = {
     'n': 2,
     'OHM': True,
 
-    'weight_decay': 5e-4,
+    'weight_decay': 0.0001,
 
     'batch_size': 6,
+    'momentum': 0.9,
 
     'log_dir': 'Logs',
 
-    'epoch': 600,
+    'epoch': 1200,
 
-    'lr_config': {
-        'lr_boundaries': [200, 400],
-        'lr_values': [1e-3, 1e-4, 1e-5]
-    },
+    # 'lr_config': {
+    #     'lr_boundaries': [200, 400],
+    #     'lr_values': [1e-3, 1e-4, 1e-5]
+    # },
+    'base_lr': 0.007,
     'deformable': False,
     # loss weights
     # 'complete_weight': 1,

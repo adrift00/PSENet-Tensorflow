@@ -141,6 +141,7 @@ def process_map(segment_map, threshold_k=0.55, thershold=0.55):
     # return expand_cc
     # segment_map = [np.squeeze(seg, 0) for seg in segment_map]
     # import ipdb;ipdb.set_trace()
+    # segment_map = [np.squeeze(seg, 0) for seg in segment_map]
     segment_map=np.squeeze(segment_map,0)
     # cv2.imwrite('binary.png',segment_map*255)
     S1 = (segment_map) > threshold_k  # (640,640)

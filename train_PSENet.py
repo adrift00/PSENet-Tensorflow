@@ -13,7 +13,7 @@ from tensorflow.python.client import timeline
 import util
 from configuration import TRAIN_CONFIG
 from dataset.dataloader import DataLoader
-from model.loss import loss_with_thresh, loss
+from model.loss import loss_with_thresh
 from model.model_v2 import model, model_deconv
 
 slim = tf.contrib.slim
@@ -64,15 +64,15 @@ def tower_loss(scope, images, labels, kernels, training_mask, gt_thresh, thresh_
     # tf.compat.v1.summary.scalar('thresh_loss',losses[2]/TRAIN_CONFIG['thresh_weight'])
     # tf.compat.v1.summary.scalar('binary_loss',losses[3]/TRAIN_CONFIG['binary_weight'])
     # use if no comp loss
-    tf.compat.v1.summary.scalar('shrink_loss',losses[0]/TRAIN_CONFIG['shrink_weight'])
-    tf.compat.v1.summary.scalar('thresh_loss',losses[1]/TRAIN_CONFIG['thresh_weight'])
-    tf.compat.v1.summary.scalar('binary_loss',losses[2]/TRAIN_CONFIG['binary_weight'])
+    tf.compat.v1.summary.scalar('shrink_loss', losses[0]/TRAIN_CONFIG['shrink_weight'])
+    tf.compat.v1.summary.scalar('thresh_loss', losses[1]/TRAIN_CONFIG['thresh_weight'])
+    tf.compat.v1.summary.scalar('binary_loss', losses[2]/TRAIN_CONFIG['binary_weight'])
 
     # tf.compat.v1.summary.image(re.sub('%s_[0-9]*/' % 'TOWER', '', 'com_pred'), tf.expand_dims(pred_gts[:, 0, :, :], -1))
     # tf.compat.v1.summary.image(re.sub('%s_[0-9]*/' % 'TOWER', '', 'gt_map'), tf.expand_dims(labels[:, :, :], -1))
     for i in range(TRAIN_CONFIG['n']-1):
         tf.compat.v1.summary.image(re.sub('%s_[0-9]*/' % 'TOWER', '%d_' %
-                                          i, 'shrink_pred'), tf.expand_dims(pred_gts[:, i, :, :], -1)) # now no comp, so use i,the normal is i+1
+                                          i, 'shrink_pred'), tf.expand_dims(pred_gts[:, i, :, :], -1))  # now no comp, so use i,the normal is i+1
         tf.compat.v1.summary.image(re.sub('%s_[0-9]*/' % 'TOWER', '%d_' %
                                           i, 'gt_kernel'), tf.expand_dims(kernels[:, i, :, :], -1))
     tf.compat.v1.summary.image(re.sub('%s_[0-9]*/' % 'TOWER', '', 'image'), images)
@@ -133,15 +133,17 @@ def main(argv=None):
     # NOTE: global_step is a special variable, can't create by below
     # global_step = tf.Variable(0,trainable=False)
     global_step = tf.compat.v1.train.create_global_step()
-    # NOTE: change lr accodring to epoch
-    lr_config = TRAIN_CONFIG['lr_config']
     num_batches_per_epoch = \
         int(data_size['train'] / TRAIN_CONFIG['batch_size'])
-    lr_boundaries = [int(e * num_batches_per_epoch) for e in lr_config['lr_boundaries']]
-    lr = tf.compat.v1.train.piecewise_constant(global_step, lr_boundaries, lr_config['lr_values'])
+    # NOTE: change lr accodring to epoch
+    # lr_config = TRAIN_CONFIG['lr_config']
+    # lr_boundaries = [int(e * num_batches_per_epoch) for e in lr_config['lr_boundaries']]
+    # lr = tf.compat.v1.train.piecewise_constant(global_step, lr_boundaries, lr_config['lr_values'])
+    lr = tf.compat.v1.train.polynomial_decay(
+        config['base_lr'], global_step, (num_batches_per_epoch*config['epoch']), end_learning_rate=0, power=0.9)
     with tf.name_scope('optimter'):
         opt = tf.compat.v1.train.MomentumOptimizer(
-            learning_rate=lr, momentum=0.99)
+            learning_rate=lr, momentum=config['momentum'])
     tf.compat.v1.summary.scalar('learning_rate', lr)
     # multi GPUs reference from tf/model/cifer10
     # Calculate the gradients for each model tower.
@@ -174,9 +176,8 @@ def main(argv=None):
                         def exclude_batch_norm(name):
                             return 'batch_normalization' not in name
 
-                        weight_decay = 1e-5
                         # Add weight decay to the loss.
-                        l2_loss = weight_decay * tf.add_n(
+                        l2_loss = config['weight_decay'] * tf.add_n(
                             # loss is computed using fp32 for numerical stability.
                             [tf.nn.l2_loss(tf.cast(v, tf.float32)) for v in tf.compat.v1.trainable_variables()
                              if exclude_batch_norm(v.name)])
