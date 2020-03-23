@@ -41,11 +41,11 @@ checkpoint_path=os.path.join(TRAIN_CONFIG['log_dir'],'train',FLAGS.run_name)
 
 def tower_loss(scope, images, labels,kernals,training_mask):
     # Build inference Graph.
-    pred_gts,_ = model(images)
+    pred_gts,emb_map,_ = model(images)
 
     # Build the portion of the Graph calculating the losses. Note that we will
     # assemble the total_loss using a custom function below.
-    _ = loss(pred_gts, labels,kernals,training_mask)
+    _ = loss(pred_gts, emb_map,labels,kernals,training_mask)
 
     # Assemble all of the losses for the current tower only.
     losses = tf.get_collection('losses', scope)

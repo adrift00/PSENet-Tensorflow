@@ -43,50 +43,82 @@ def time_it(func):
     return newFunc
 
 
-def expansion_p(CC, Si):
-    Q = queue.Queue()
-    T = set()
-    P = set()
-    h, w = CC.shape
-    for y in range(h):
-        for x in range(w):
-            if CC[y, x] > 0:
-                T.add(((y, x), CC[y, x]))
-                P.add((y, x))
-                Q.put(((y, x), CC[y, x]))
+# def expansion_p(CC, Si):
+#     Q = queue.Queue()
+#     T = set()
+#     P = set()
+#     h, w = CC.shape
+#     for y in range(h):
+#         for x in range(w):
+#             if CC[y, x] > 0:
+#                 T.add(((y, x), CC[y, x]))
+#                 P.add((y, x))
+#                 Q.put(((y, x), CC[y, x]))
 
-    while Q.empty() == False:
-        p, label = Q.get()
-        for y in range(p[0]-1, p[0]+2):
-            for x in range(p[1]-1, p[1]+2):
-                if y >= 0 and y < h and x >= 0 and x < w:
-                    if (y, x) not in P and Si[y, x] == 1:
-                        P.add((y, x))
-                        T.add(((y, x), label))
-                        Q.put(((y, x), label))
-                        CC[y, x] = label
-    # now all element in Si are give label value
-    return CC
+#     while Q.empty() == False:
+#         p, label = Q.get()
+#         for y in range(p[0]-1, p[0]+2):
+#             for x in range(p[1]-1, p[1]+2):
+#                 if y >= 0 and y < h and x >= 0 and x < w:
+#                     if (y, x) not in P and Si[y, x] == 1:
+#                         P.add((y, x))
+#                         T.add(((y, x), label))
+#                         Q.put(((y, x), label))
+#                         CC[y, x] = label
+#     # now all element in Si are give label value
+#     return CC
 
-# NOTE implement by C++, so the divese will be fast
-# now it took 17ms
+# # NOTE implement by C++, so the divese will be fast
+# # now it took 17ms
+# # @time_it
+
+
+# def expansion(CC, Si):
+#     def check(arr):
+#         if arr.shape[-1] == 1:
+#             arr = np.squeeze(arr, -1)
+#             return arr.astype(np.int32)
+#         else:
+#             return arr.astype(np.int32)
+#     CC = check(CC)
+#     Si = check(Si)
+
+#     CC_out = CC.copy(order='C')
+#     ps = mylib.PyExpand()
+#     ps.expansion(CC_out, Si.copy(order='C'))
+#     return CC_out
+
+
 # @time_it
-
-
-def expansion(CC, Si):
-    def check(arr):
-        if arr.shape[-1] == 1:
-            arr = np.squeeze(arr, -1)
-            return arr.astype(np.int32)
-        else:
-            return arr.astype(np.int32)
-    CC = check(CC)
-    Si = check(Si)
-
-    CC_out = CC.copy(order='C')
-    ps = mylib.PyExpand()
-    ps.expansion(CC_out, Si.copy(order='C'))
-    return CC_out
+def process_map(segment_map, embedding_map, threshold=0.55):
+    segment_map = [np.squeeze(seg, 0) for seg in segment_map]
+    # First, binary the segment map, choose OTSU or other argrithem
+    # TODO 分割图使用相同排列顺序
+    S1 = (segment_map[1]) > threshold  # (640,640)
+    # get cc and label them with different number
+    shrink_map = label(S1, connectivity=2)
+    result_map=shrink_map.copy()
+    full_map = segment_map[0] > threshold
+    text_num = shrink_map.max()
+    diff_map = full_map-shrink_map
+    diff_points = np.where(diff_map == 1)
+    diff_points = zip(*diff_points)
+    sigma=1
+    for point in diff_points:
+        min_distance=np.inf
+        belong_to=0
+        for i in range(1, text_num+1):
+            point_embedding=embedding_map[point[0],point[1],:]
+            kernel_idx=np.where(shrink_map==i)
+            kernel_embedding=embedding_map[kernel_idx[0],kernel_idx[1],:]
+            kernel_embedding=kernel_embedding.reshape(-1,kernel_embedding.shape[2])
+            distance=(kernel_embedding-point_embedding).abs().sum(axis=1).min()
+            if distance<min_distance:
+                min_distance=distance
+                belong_to=i
+        if min_distance<sigma:
+            result_map[point[0],point[1]]=belong_to
+    return result_map
 
 
 def rect_to_xys(rect, image_shape):
@@ -119,24 +151,6 @@ def rect_to_xys(rect, image_shape):
         points[i_xy, :] = [x, y]
     points = np.reshape(points, -1)
     return points
-
-# @time_it
-
-
-def process_map(segment_map, threshold_k=0.55, thershold=0.55):
-    segment_map = [np.squeeze(seg, 0) for seg in segment_map]
-    # First, binary the segment map, choose OTSU or other argrithem
-    # TODO 分割图使用相同排列顺序
-    S1 = (segment_map[-1]) > threshold_k  # (640,640)
-    # get cc and label them with different number
-    CC = label(S1, connectivity=2)
-    expand_cc = CC
-    # TODO 分割图使用相同排列顺序
-    for i in range(len(segment_map)-2, -1, -1):
-        # S_i = (segment_map[i]>thershold)*S
-        S_i = segment_map[i] > thershold
-        expand_cc = expansion(expand_cc, S_i)
-    return expand_cc
 
 
 def region_to_bbox(mask, image_size, min_height=10, min_area=300):

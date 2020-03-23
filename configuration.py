@@ -11,7 +11,7 @@ TRAIN_CONFIG = {
     'data_format': 'NHWC',
     'use_rotation': False,
     'm': 0.4,
-    'n': 7,
+    'n': 2,
     'OHM': True,
 
     'weight_decay': 5e-4,

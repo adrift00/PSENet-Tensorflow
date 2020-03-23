@@ -201,7 +201,7 @@ def process_data_np(image, label, bboxes):  # input one image, label for ignore 
 
     img, gt_text, training_mask, gt_kernals = imgs[0], imgs[1], imgs[2], imgs[3:]
 
-    gt_text[gt_text > 0] = 1
+    # gt_text[gt_text > 0] = 1 # comment this for discriminate text instance in embedding use.
     gt_kernals = np.array(gt_kernals)
 
     img = Image.fromarray(img)

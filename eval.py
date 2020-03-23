@@ -1,6 +1,7 @@
+import metric.script as script
 import util
 
-config['id']=config['id'] if len(para_list)==1 else index+1
+config['id'] = config['id'] if len(para_list) == 1 else index+1
 infer_path = util.io.join_path(
     dump_path, chp_name+'_'+str(config['id']))
 
@@ -10,7 +11,6 @@ os.chdir('./metric')
 para = {'g': 'gt.zip',
         's': zip_path,
         'o': infer_path}
-import metric.script as script
 func_name = 'script.eval(para)'
 try:
     res = eval(func_name)
