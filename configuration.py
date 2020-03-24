@@ -16,7 +16,7 @@ TRAIN_CONFIG = {
 
     'weight_decay': 5e-4,
 
-    'batch_size': 6,
+    'batch_size': 2,
 
     'log_dir': 'Logs',
 

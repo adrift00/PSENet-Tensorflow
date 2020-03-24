@@ -86,12 +86,16 @@ def average_gradients(tower_grads):
         grads = []
         for g, _ in grad_and_vars:
             # Add 0 dimension to the gradients to represent the tower.
+            if g is None:
+                continue
             expanded_g = tf.expand_dims(g, 0)
 
             # Append on a 'tower' dimension which we will average over below.
             grads.append(expanded_g)
 
         # Average over the 'tower' dimension.
+        if len(grads)==0:
+            continue
         grad = tf.concat(axis=0, values=grads)
         grad = tf.reduce_mean(grad, 0)
 
@@ -174,6 +178,7 @@ def main(argv=None):
     tf.summary.scalar('toatal_loss',loss_sum/int(num_gpu))
     # We must calculate the mean of each gradient. Note that this is the
     # synchronization point across all towers.
+    # import ipdb;ipdb.set_trace()
     grads = average_gradients(tower_grads)
 
     # Add histograms for gradients.

@@ -171,51 +171,62 @@ def model(inputs, data_format='channels_first', is_training=True):
                 seg_maps = tf.concat((seg_maps, seg_map), 1 if data_format == 'channels_first' else -1)
 
         # for embedding feature
-        emb_map = tf.layers.conv2d(emb_feat, 8, 1, data_format=data_format)
-        emb_map = tf.sigmoid(unpool(emb_map, 4, data_format=data_format))
-        if data_format == 'channel_first':
-            emb_map = tf.transpose(emb_map, [0, 2, 3, 1])
+        # emb_map = tf.layers.conv2d(emb_feat, 8, 1, data_format=data_format)
+        emb_feat = unpool(emb_feat, 4, data_format=data_format)
+        emb_feat = tf.layers.conv2d(emb_feat, 64, 3, padding='same', data_format=data_format)
+        emb_feat = batch_norm(emb_feat, training=is_training, data_format=data_format)
+        emb_feat = tf.nn.relu(emb_feat)
 
+        emb_feat = tf.layers.conv2d(emb_feat, 16, 3, padding='same', data_format=data_format)
+        emb_feat = batch_norm(emb_feat, training=is_training, data_format=data_format)
+        emb_feat = tf.nn.relu(emb_feat)
+
+        emb_feat = tf.layers.conv2d(emb_feat, 8, 3, padding='same', data_format=data_format)
+        emb_feat = batch_norm(emb_feat, training=is_training, data_format=data_format)
+        emb_map = tf.nn.sigmoid(emb_feat)
+        # if data_format == 'channel_first':
+        #     emb_map = tf.transpose(emb_map, [0, 2, 3, 1])
+        emb_map = tf.transpose(emb_map, [0, 2, 3, 1])
         if is_training == False:
             with tf.variable_scope('format_change'):
                 seg_maps = tf.transpose(seg_maps, [0, 2, 3, 1])
         return seg_maps, emb_map, f
 
 
-# def model_deconv(inputs, data_format='channels_first', is_training=True):
-#     model_class = ImagenetModel(
-#         resnet_size=50, data_format=data_format, num_classes=0, resnet_version=1)
-#     _, end_points = model_class(inputs, is_training)
+def model_deconv(inputs, data_format='channels_first', is_training=True):
+    model_class = ImagenetModel(
+        resnet_size=50, data_format=data_format, num_classes=0, resnet_version=1)
+    _, end_points = model_class(inputs, is_training)
 
-#     f = [end_points['block_layer4'], end_points['block_layer3'],
-#          end_points['block_layer2'], end_points['block_layer1']]
-#     P = [None, None, None, None]
-#     # attent=[None,None,None,None]
-#     # import pudb; pudb.set_trace()
-#     with tf.variable_scope('u_net'):
-#         def deconv(input, channels, factor=2):
-#             input = conv_layer(input, channels, 1)
-#             input = conv_layer(input, channels, 3)
-#             return unpool(input, factor, data_format=data_format)
+    f = [end_points['block_layer4'], end_points['block_layer3'],
+         end_points['block_layer2'], end_points['block_layer1']]
+    P = [None, None, None, None]
+    # attent=[None,None,None,None]
+    # import pudb; pudb.set_trace()
+    with tf.variable_scope('u_net'):
+        def deconv(input, channels, factor=2):
+            input = conv_layer(input, channels, 1)
+            input = conv_layer(input, channels, 3)
+            return unpool(input, factor, data_format=data_format)
 
-#         out4 = tf.concat((deconv(f[0], 1024), f[1]), 1)
-#         out3 = tf.concat((deconv(out4, 512), f[2]), 1)
-#         out2 = tf.concat((deconv(out3, 256), f[3]), 1)
-#         out1 = deconv(out2, 256, factor=1)
+        out4 = tf.concat((deconv(f[0], 1024), f[1]), 1)
+        out3 = tf.concat((deconv(out4, 512), f[2]), 1)
+        out2 = tf.concat((deconv(out3, 256), f[3]), 1)
+        out1 = deconv(out2, 256, factor=1)
 
-#         out1 = tf.layers.conv2d(out1, 1, 3, padding='same', kernel_initializer=initializers.variance_scaling_initializer(
-#             factor=2.0, mode='FAN_IN', uniform=False), data_format=data_format)
-#         out1 = batch_norm(out1, training=is_training, data_format=data_format)
-#         out1 = tf.nn.relu(out1)
+        out1 = tf.layers.conv2d(out1, 1, 3, padding='same', kernel_initializer=initializers.variance_scaling_initializer(
+            factor=2.0, mode='FAN_IN', uniform=False), data_format=data_format)
+        out1 = batch_norm(out1, training=is_training, data_format=data_format)
+        out1 = tf.nn.relu(out1)
 
-#         for i in range(config['n']):
-#             seg_map = tf.layers.conv2d(out1, 8, 1, data_format=data_format) # 8 output channels
-#             seg_map = tf.sigmoid(unpool(seg_map, 4, data_format=data_format))
-#             if i == 0:
-#                 seg_maps = seg_map
-#             else:
-#                 seg_maps = tf.concat((seg_maps, seg_map), 1 if data_format == 'channels_first' else -1)
+        for i in range(config['n']):
+            seg_map = tf.layers.conv2d(out1, 8, 1, data_format=data_format)  # 8 output channels
+            seg_map = tf.sigmoid(unpool(seg_map, 4, data_format=data_format))
+            if i == 0:
+                seg_maps = seg_map
+            else:
+                seg_maps = tf.concat((seg_maps, seg_map), 1 if data_format == 'channels_first' else -1)
 
-#     with tf.name_scope('format_change'):
-#         seg_maps = tf.transpose(seg_maps, [0, 2, 3, 1])
-#         return seg_maps, f
+    with tf.name_scope('format_change'):
+        seg_maps = tf.transpose(seg_maps, [0, 2, 3, 1])
+        return seg_maps, f
