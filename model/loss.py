@@ -90,14 +90,12 @@ def calc_emb_loss_single(maps):
     emb_pred_map, emb_gt_map = maps
     text_num = tf.cast(tf.reduce_max(emb_gt_map), tf.int32)
     # text_num = tf.Print(text_num, ['text_num', text_num])
-    # print_op=tf.print(text_num,output_stream=sys.stdout)
-    l_var, l_dist = tf.constant(0.), tf.constant(0.)
+    l_var, l_dist = 0., 0.
 
     def func2():
-        l_var, l_dist = tf.constant(0.), tf.constant(0.)
-        max_shape = max(emb_gt_map.get_shape().as_list())
+        l_var, l_dist = 0., 0.
+        # max_shape = max(emb_gt_map.get_shape().as_list())
         u_s = tf.zeros([text_num, 8])
-        # u_s=[]
         eta, gamma = 0.5, 1.5
 
         def cond(i, n, l_var, u_s):
@@ -105,23 +103,32 @@ def calc_emb_loss_single(maps):
 
         def body(i, n, l_var, u_s):
             idx = tf.cast(i, tf.float32)
+            # idx = tf.Print(idx, ['idx', idx])
             mask = tf.cast(tf.equal(emb_gt_map, idx), tf.float32)
             pred_map = emb_pred_map*tf.expand_dims(mask, axis=-1)
-            u = tf.reduce_sum(pred_map, [0, 1])/tf.reduce_sum(mask)
+            # pred_map = tf.Print(pred_map, ['pred_map_max', tf.reduce_max(pred_map)])
             num = tf.reduce_sum(mask)
+            pred_sum = tf.reduce_sum(pred_map, [0, 1])
             # num = tf.Print(num, ['mask_sum', num])
-            # u_s[i]=tf.add(u_s[i],u)
+            # pred_sum = tf.Print(pred_sum, ['pred_sum', pred_sum], summarize=8)
+            # u=pred_sum/num
+            u = tf.cond(tf.equal(num, 0.),
+                        lambda: tf.zeros(8),
+                        lambda: pred_sum/num)
+            # u = tf.Print(u, ['u', u], summarize=8)
             u_s = tf.concat(values=[u_s[0:i], [u], u_s[i+1:]], axis=0)
             # calc_max_edge(mask)
             # w_scale = tf.exp(calc_max_edge(mask)/(2*max_shape))
             # w_scale = tf.clip_by_value(w_scale, 1, 1.65)
             w_scale = 1
-            num = tf.Print(num, ['mask_num', num])
-            import ipdb;ipdb.set_trace()
+            # num = tf.Print(num, ['mask_num', num])
+            # import ipdb;ipdb.set_trace()
             tmp = tf.cond(tf.equal(num, 0.),
                           lambda: tf.constant(0.),
-                          lambda: (tf.reduce_sum(tf.math.maximum(w_scale*tf.reduce_sum(tf.abs(pred_map-u), axis=-1)-eta, 0))/num))
-            tmp = tf.Print(tmp, ['every_loss_var: ', tmp])
+                          lambda: (tf.reduce_sum(
+                                    tf.math.maximum(
+                                    w_scale*tf.reduce_sum(tf.abs((pred_map-u)*tf.expand_dims(mask, axis=-1)), axis=-1)-eta, 0))/num))
+            # tmp = tf.Print(tmp, ['every_loss_var: ', tmp])
             l_var += tmp
             i = i+1
             return i, n, l_var, u_s
@@ -147,25 +154,6 @@ def calc_emb_loss_single(maps):
 
         _, _, l_dist = tf.while_loop(cond1, body1, [1, text_num+1, l_dist])
 
-        # for i in range(1, text_num+1):
-        #     mask = (emb_gt_map == i)
-        #     pred_map = emb_pred_map*mask
-        #     u = (tf.reduce_sum(pred_map, [0, 1])/tf.reduce_sum(mask, [0, 1]))
-        #     u_s.append(u)
-        #     n = tf.reduce_sum(mask, [0, 1])
-        #     w_scale = tf.exp(calc_max_edge(mask)/(2*max_shape))
-        #     w_scale = tf.clip_by_value(w_scale, 1, 1.65)
-        #     l_var += (tf.reduce_sum(tf.math.maximum(w_scale*tf.reduce_sum((pred_map-u).abs())-eta, 0))/n)
-        # for i in range(1, text_num+1):
-        #     for j in range(1, text_num+1):
-        #         if j == i:
-        #             continue
-        #         mask1 = (emb_gt_map == i)
-        #         mask2 = (emb_gt_map == j)
-        #         min_dis = calc_min_distance(mask1, mask2)
-        #         w_dist = (1-20*tf.math.exp(-(4+min_dis/max_shape*10)))
-        #         w_dist = tf.clip_by_value(w_dist, 0.63, 1)
-        #         l_dist += tf.math.maximum(gamma-w_dist*tf.reduce_sum((u_s[i]-u_s[j]).abs()), 0)
         l_var = l_var/(tf.cast(text_num, tf.float32))
         l_dist = tf.cond(tf.equal(text_num-1, 0),
                          lambda: tf.constant(0.),
@@ -196,14 +184,14 @@ def loss(pred_seg_maps, emb_pred_map, gt_map, kernels, training_mask):
         # NOTE: the mask is pred_map, may try gt_map?
         mask = tf.to_float(tf.greater(pred_text_map*training_mask, 0.5))
         pred_text_map = pred_text_map*training_mask
+        emb_pred_map = emb_pred_map*tf.expand_dims(training_mask, axis=-1)
 
+        gt_map = gt_map*training_mask
         emb_gt_map = tf.identity(gt_map)
         # change the gt_map tensor when it >0, assign 1 to it
         one_tensor = tf.ones_like(gt_map)
         zero_tensor = tf.zeros_like(gt_map)
         gt_map = tf.where(tf.greater(gt_map, 0.), one_tensor, zero_tensor)
-
-        gt_map = gt_map*training_mask
 
         if config['OHM']:
             pred_maps, gt_maps = tf.map_fn(online_hard_min, (pred_text_map, gt_map))
@@ -212,7 +200,7 @@ def loss(pred_seg_maps, emb_pred_map, gt_map, kernels, training_mask):
         ohm_dice_loss = cal_dice_loss(pred_maps, gt_maps)
 
         dice_loss = tf.reduce_mean(ohm_dice_loss)
-        tf.add_to_collection('losses', 0.7*dice_loss)
+        tf.add_to_collection('losses', 0.5*dice_loss)
 
         for i in range(config['n']-1):
             # for shrink loss
@@ -225,7 +213,7 @@ def loss(pred_seg_maps, emb_pred_map, gt_map, kernels, training_mask):
             dice_loss = cal_dice_loss(pred_map, gt_map)
             dice_loss = tf.reduce_mean(dice_loss)
             # NOTE the paper is divide Ls by (n-1), I don't divide this for long time
-            tf.add_to_collection('losses', (1-0.7)*dice_loss/(n-1))
+            tf.add_to_collection('losses', (1-0.5)*dice_loss/(n-1))
 
         # loss for embedding maps
         loss_var, loss_dist = tf.map_fn(calc_emb_loss_single, (emb_pred_map, emb_gt_map))

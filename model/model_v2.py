@@ -171,9 +171,17 @@ def model(inputs, data_format='channels_first', is_training=True):
                 seg_maps = tf.concat((seg_maps, seg_map), 1 if data_format == 'channels_first' else -1)
 
         # for embedding feature
-        # emb_map = tf.layers.conv2d(emb_feat, 8, 1, data_format=data_format)
         emb_feat = unpool(emb_feat, 4, data_format=data_format)
-        emb_feat = tf.layers.conv2d(emb_feat, 64, 3, padding='same', data_format=data_format)
+        # add two coodinate channels
+        x = tf.range(640, dtype=tf.float32)
+        y = tf.range(640, dtype=tf.float32)
+        X, Y = tf.meshgrid(x, y)
+        emb_feat = tf.concat([emb_feat,
+                              tf.tile(tf.expand_dims(tf.expand_dims(X, 0), 0), [config['batch_size'], 1, 1, 1]),
+                              tf.tile(tf.expand_dims(tf.expand_dims(Y, 0), 0), [config['batch_size'], 1, 1, 1])],
+                             axis=1)
+        # import ipdb;ipdb.set_trace()
+        emb_feat = tf.layers.conv2d(emb_feat, 32, 3, padding='same', data_format=data_format)
         emb_feat = batch_norm(emb_feat, training=is_training, data_format=data_format)
         emb_feat = tf.nn.relu(emb_feat)
 
@@ -184,6 +192,7 @@ def model(inputs, data_format='channels_first', is_training=True):
         emb_feat = tf.layers.conv2d(emb_feat, 8, 3, padding='same', data_format=data_format)
         emb_feat = batch_norm(emb_feat, training=is_training, data_format=data_format)
         emb_map = tf.nn.sigmoid(emb_feat)
+
         # if data_format == 'channel_first':
         #     emb_map = tf.transpose(emb_map, [0, 2, 3, 1])
         emb_map = tf.transpose(emb_map, [0, 2, 3, 1])
