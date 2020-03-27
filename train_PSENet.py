@@ -58,13 +58,13 @@ def tower_loss(scope, images, labels,kernals,training_mask):
     loss_name = re.sub('%s_[0-9]*/' % 'TOWER', '', total_loss.op.name)
     tf.summary.scalar(loss_name, total_loss)
 
-    tf.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','',pred_gts.op.name),tf.expand_dims(pred_gts[:,0,:,:],-1))
-    tf.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','',labels.op.name), tf.expand_dims(labels[:,:,:],-1))
-    for i in range(TRAIN_CONFIG['n']-1):    
-        tf.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','%d_'%i,pred_gts.op.name),tf.expand_dims(pred_gts[:,i+1,:,:],-1))
-        tf.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','%d_'%i,labels.op.name), tf.expand_dims(kernals[:,i,:,:],-1))
-    tf.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','',images.op.name), images)
-    tf.summary.image(re.sub('%s_[0-9]*/' % 'TOWER','',training_mask.op.name), tf.expand_dims(training_mask,-1))
+    tf.summary.image('full_pred',tf.expand_dims(pred_gts[:,0,:,:],-1))
+    tf.summary.image('full_gt', tf.expand_dims(labels[:,:,:],-1))
+    for i in range(TRAIN_CONFIG['n']-1):
+        tf.summary.image('center_pred',tf.expand_dims(pred_gts[:,i+1,:,:],-1))
+        tf.summary.image('center_gt', tf.expand_dims(kernals[:,i,:,:],-1))
+    tf.summary.image('gt_img', images)
+    tf.summary.image('train_mask', tf.expand_dims(training_mask,-1))
     return total_loss
 
 

@@ -124,9 +124,6 @@ def model(inputs, data_format='channels_first', is_training=True):
                 P[i] = batch_norm(P[i], training=is_training, data_format=data_format)
                 P[i] = tf.nn.relu(P[i])
 
-                # attent[i]=slim.conv2d(P[i],1,1)
-                # P[i]=P[i]*attent[i]
-
                 P[i] = unpool(P[i-1], data_format=data_format)+P[i]
                 F_multi = tf.concat((F_multi, unpool(
                     P[i], 8/(2**i), data_format=data_format)), 1 if data_format == 'channels_first' else -1)
@@ -173,12 +170,12 @@ def model(inputs, data_format='channels_first', is_training=True):
         # for embedding feature
         emb_feat = unpool(emb_feat, 4, data_format=data_format)
         # add two coodinate channels
-        x = tf.range(640, dtype=tf.float32)
-        y = tf.range(640, dtype=tf.float32)
+        x = tf.range(tf.cast(tf.shape(emb_feat)[3], tf.float32), dtype=tf.float32)
+        y = tf.range(tf.cast(tf.shape(emb_feat)[2], tf.float32), dtype=tf.float32)
         X, Y = tf.meshgrid(x, y)
         emb_feat = tf.concat([emb_feat,
-                              tf.tile(tf.expand_dims(tf.expand_dims(X, 0), 0), [config['batch_size'], 1, 1, 1]),
-                              tf.tile(tf.expand_dims(tf.expand_dims(Y, 0), 0), [config['batch_size'], 1, 1, 1])],
+                              tf.tile(tf.expand_dims(tf.expand_dims(X, 0), 0), [tf.shape(emb_feat)[0], 1, 1, 1]),
+                              tf.tile(tf.expand_dims(tf.expand_dims(Y, 0), 0), [tf.shape(emb_feat)[0], 1, 1, 1])],
                              axis=1)
         # import ipdb;ipdb.set_trace()
         emb_feat = tf.layers.conv2d(emb_feat, 32, 3, padding='same', data_format=data_format)

@@ -43,81 +43,64 @@ def time_it(func):
     return newFunc
 
 
-# def expansion_p(CC, Si):
-#     Q = queue.Queue()
-#     T = set()
-#     P = set()
-#     h, w = CC.shape
-#     for y in range(h):
-#         for x in range(w):
-#             if CC[y, x] > 0:
-#                 T.add(((y, x), CC[y, x]))
-#                 P.add((y, x))
-#                 Q.put(((y, x), CC[y, x]))
-
-#     while Q.empty() == False:
-#         p, label = Q.get()
-#         for y in range(p[0]-1, p[0]+2):
-#             for x in range(p[1]-1, p[1]+2):
-#                 if y >= 0 and y < h and x >= 0 and x < w:
-#                     if (y, x) not in P and Si[y, x] == 1:
-#                         P.add((y, x))
-#                         T.add(((y, x), label))
-#                         Q.put(((y, x), label))
-#                         CC[y, x] = label
-#     # now all element in Si are give label value
-#     return CC
-
-# # NOTE implement by C++, so the divese will be fast
-# # now it took 17ms
-# # @time_it
-
-
-# def expansion(CC, Si):
-#     def check(arr):
-#         if arr.shape[-1] == 1:
-#             arr = np.squeeze(arr, -1)
-#             return arr.astype(np.int32)
-#         else:
-#             return arr.astype(np.int32)
-#     CC = check(CC)
-#     Si = check(Si)
-
-#     CC_out = CC.copy(order='C')
-#     ps = mylib.PyExpand()
-#     ps.expansion(CC_out, Si.copy(order='C'))
-#     return CC_out
 
 
 # @time_it
 def process_map(segment_map, embedding_map, threshold=0.55):
     segment_map = [np.squeeze(seg, 0) for seg in segment_map]
+    embedding_map = np.squeeze(embedding_map, 0)
     # First, binary the segment map, choose OTSU or other argrithem
     # TODO 分割图使用相同排列顺序
-    S1 = (segment_map[1]) > threshold  # (640,640)
+    shrink_bin_map = segment_map[1] > threshold  # (640,640)
     # get cc and label them with different number
-    shrink_map = label(S1, connectivity=2)
-    result_map=shrink_map.copy()
-    full_map = segment_map[0] > threshold
+    shrink_map = label(shrink_bin_map, connectivity=2)
+    result_map = shrink_map.copy()
+    result_map = np.squeeze(result_map, -1)
+    full_bin_map = segment_map[0] > threshold
+    full_map = label(full_bin_map, connectivity=2)
     text_num = shrink_map.max()
-    diff_map = full_map-shrink_map
-    diff_points = np.where(diff_map == 1)
-    diff_points = zip(*diff_points)
-    sigma=1
-    for point in diff_points:
-        min_distance=np.inf
-        belong_to=0
-        for i in range(1, text_num+1):
-            point_embedding=embedding_map[point[0],point[1],:]
-            kernel_idx=np.where(shrink_map==i)
-            kernel_embedding=embedding_map[kernel_idx[0],kernel_idx[1],:]
-            kernel_embedding=kernel_embedding.reshape(-1,kernel_embedding.shape[2])
-            distance=(kernel_embedding-point_embedding).abs().sum(axis=1).min()
-            if distance<min_distance:
-                min_distance=distance
-                belong_to=i
-        if min_distance<sigma:
-            result_map[point[0],point[1]]=belong_to
+    full_text_num=full_map.max()
+    if text_num == 0:
+        return result_map
+    sigma = 0.2
+    for f_idx in range(1,full_text_num):
+        full_text_mask=(full_map==f_idx)
+        single_shrink_bin_map=shrink_bin_map*full_text_mask
+        single_full_bin_map=full_bin_map*full_text_mask
+        single_shrink_map=shrink_map*full_text_mask
+        single_full_map=shrink_map*full_text_mask
+        # 
+        diff_map=single_full_bin_map-single_shrink_bin_map.astype(np.int32)
+        point_idx=np.where(diff_map==1)
+        points=embedding_map[point_idx[0],point_idx[1],:]
+        points=points.reshape(-1,points.shape[-1])
+        # print(np.unique(single_shrink_map))
+        shrink_text_indies=np.unique(single_shrink_map)[1:] # don't contain 0
+        if len(shrink_text_indies)==0:
+            continue
+        cluster_distances=np.zeros((points.shape[0],len(shrink_text_indies)))
+        for i,idx in enumerate(shrink_text_indies) :
+            shrink_idx=np.where(single_shrink_map==idx)
+            cluster_points=embedding_map[shrink_idx[0],shrink_idx[1],:]
+            cluster_points=cluster_points.reshape(-1,cluster_points.shape[-1])
+            cluster_center=cluster_points.mean(axis=0)
+            # cluster_dis=np.sqrt(((points-cluster_center)**2).sum(axis=1))
+            cluster_dis=np.abs(points-cluster_center).sum(axis=1)
+            cluster_distances[:,i]=cluster_dis
+        min_dis_idx=np.argmin(cluster_distances,axis=1)
+        cluster_text_idx=shrink_text_indies[min_dis_idx]
+        min_dis=np.min(cluster_distances,axis=1)
+        valid_idx=np.where(min_dis<sigma)[0]
+        # print('total num', cluster_distances.shape[0])
+        # print('valid num', valid_idx.shape[0])
+        # print('max dis', min_dis.max())
+        # print('min dis', min_dis.min())
+        if valid_idx.shape[0] > 0:
+            result_map[point_idx[0][valid_idx],point_idx[1][valid_idx]]=cluster_text_idx[valid_idx]
+    # cv2.imwrite('full_map.png', np.squeeze(full_map, -1)*20)
+    # cv2.imwrite('center_map.png', np.squeeze(shrink_map, -1)*20)
+    # cv2.imwrite('result_map.png', result_map*20)
+    # import ipdb;ipdb.set_trace()
     return result_map
 
 
@@ -141,8 +124,6 @@ def rect_to_xys(rect, image_shape):
             return h - 1
         return y
 
-    # rect = ((rect[0], rect[1]), (rect[2], rect[3]), rect[4])
-
     points = cv2.boxPoints(rect)
     points = np.int0(points)
     for i_xy, (x, y) in enumerate(points):
@@ -164,15 +145,8 @@ def region_to_bbox(mask, image_size, min_height=10, min_area=300):
     rect = cv2.minAreaRect(contours[0])
     rect = list(rect)
     sw, sh = rect[1][:]
-    # if min(sw, sh) < min_height:
-    #     return None
-    # if sw*sh < min_area:
-    #     return None
-    # if max(sw, sh) * 1.0 / min(sw, sh) < 2:
-    #     return None
     rect = tuple(rect)
     xys = rect_to_xys(rect, [h, w])
-    # boxes.append(np.append(xys,1))
     return xys
 
 
@@ -188,12 +162,6 @@ def region_to_poly(mask, image_size):
     rect = cv2.minAreaRect(contours[0])
     rect = list(rect)
     sw, sh = rect[1][:]
-    # if min(sw, sh) < min_height:
-    #     return None
-    # if sw*sh < min_area:
-    #     return None
-    # if max(sw, sh) * 1.0 / min(sw, sh) < 2:
-    #     return None
 
     cnt = contours[0]
     # define main island contour approx. and hull
@@ -271,9 +239,6 @@ def write_to_file(bboxes, image_name, output_dir, scores=None):
             line += "%f\r\n" % values[-1]
         lines.append(line)
     util.io.write_lines(filename, lines)
-    # print( 'result has been written to:', filename)
-
-    # cv2.polylines(im[:, :, ::-1], [box.astype(np.int32).reshape((-1, 1, 2))], True, color=(255, 255, 0), thickness=3)
 
 
 def log_to_file(imgs_path, file_name, image_arr, bboxes, segment_maps, gt):
@@ -325,7 +290,7 @@ def eval_model(config, FLAGS, para_list=None, is_log=False):
             image, scale=scale, out_shape=out_shape)
 
         image_process = tf.expand_dims(image_process, 0)
-        seg_maps, _ = model(image_process, is_training=False)
+        seg_maps, emb_maps, _ = model(image_process, is_training=False)
 
         # rescale seg_maps to origin size
         seg_map_list = []
@@ -345,8 +310,6 @@ def eval_model(config, FLAGS, para_list=None, is_log=False):
         # os.system('rm -r {}'.format(dump_path))
 
         global_step = tf.train.get_or_create_global_step()
-        # global_step = tf.Variable(0,trainable=False)
-        # Variables to restore: moving avg. or normal weights.
 
         if FLAGS.using_moving_average:
             variable_averages = tf.train.ExponentialMovingAverage(0.9999)
@@ -385,17 +348,8 @@ def eval_model(config, FLAGS, para_list=None, is_log=False):
             init_transform = tf.variables_initializer(trans_var)
             sess.run(init_transform)
 
-            # ckpt='/workspace/lupu/PSENet/Logs/train/run_bat-b/model.ckpt-21579'
-            # for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES):
-            #     print(var)
-            # if var.name.find('BatchNorm')!=-1:
-            #   chkp.print_tensors_in_checkpoint_file(config['ckpt'], tensor_name=var.name.split(':')[0], all_tensors=False)
-
             saver.restore(sess, config['ckpt'])
             print('restore model from: ', config['ckpt'])
-
-            # coord = tf.train.Coordinator()
-            # threads = tf.train.start_queue_runners(coord=coord)
             sum_writer = tf.summary.FileWriter(dump_path, graph=sess.graph)
 
             files = tf.gfile.Glob(os.path.join(config['test_dir'], '*.jpg'))
@@ -412,10 +366,10 @@ def eval_model(config, FLAGS, para_list=None, is_log=False):
                 gt = rrc_evaluation_funcs.load_zip_file(gtFilePath, 'gt_img_([0-9]+).txt')
             for iter, file_name in enumerate(files_sorted):
                 pbar.update(1)
-                # image_data = util.img.imread(
-                #     util.io.join_path(config['test_dir'], image_name), rgb=True)
                 image_name = os.path.basename(file_name)
                 image_name = image_name.split('.')[0]
+                # image_data = util.img.imread(
+                #     util.io.join_path(config['test_dir'], image_name), rgb=True)
 
                 if is_log:
                     # NOTE: useful func, analysis tf graph run time
@@ -423,8 +377,8 @@ def eval_model(config, FLAGS, para_list=None, is_log=False):
                         trace_level=tf.RunOptions.FULL_TRACE)
                     run_metadata = tf.RunMetadata()
                     # the input size must be  times 32(stride?)
-                    image_arr, segment_maps, summ = sess.run(
-                        [image, seg_map_list, summary], feed_dict={path_ph: file_name}, options=run_options, run_metadata=run_metadata)
+                    image_arr, segment_maps, embeddding_map, summ = sess.run(
+                        [image, seg_map_list, emb_maps, summary], feed_dict={path_ph: file_name}, options=run_options, run_metadata=run_metadata)
 
                     # segment_maps=(segment_maps>0.5).astype(np.float32)
 
@@ -433,8 +387,8 @@ def eval_model(config, FLAGS, para_list=None, is_log=False):
                     sum_writer.add_run_metadata(run_metadata, 'step%d' % iter)
                 else:
                     # segment_maps is list
-                    segment_maps = sess.run(
-                        seg_map_list, feed_dict={path_ph: file_name})
+                    segment_maps, embeddding_map = sess.run(
+                        [seg_map_list, emb_maps], feed_dict={path_ph: file_name})
 
                 para_list = [(config['threshold_kernel'], config['threshold'],
                               config['aver_score'])] if para_list == None else para_list
@@ -452,12 +406,14 @@ def eval_model(config, FLAGS, para_list=None, is_log=False):
                     imgs_path = util.io.join_path(infer_path, 'image_log')
 
                     result_map = process_map(
-                        segment_maps, config['threshold_kernel'], config['threshold'])
+                        segment_maps, embeddding_map, config['threshold'])
 
                     bboxes, scores = map_to_bboxes(
                         segment_maps, result_map, image_size, aver_score=config['aver_score'])
 
                     if is_log:
+                        # import ipdb;ipdb.set_trace()
+                        segment_maps.append(result_map[None, :, :, None])
                         log_to_file(imgs_path, file_name, image_arr, bboxes, segment_maps, gt)
 
                     write_to_file(bboxes, image_name, txt_path)

@@ -44,46 +44,46 @@ def online_hard_min(maps):
     return pred_ohm, gt_map
 
 
-def calc_distance(p1, p2):
-    return np.sqrt((p1[0]-p2[0])**2+(p1[1]-p2[1])**2)
+# def calc_distance(p1, p2):
+#     return np.sqrt((p1[0]-p2[0])**2+(p1[1]-p2[1])**2)
 
 
-def calc_max_edge(mask):
-    with tf.Session() as sess:
-        init_op = tf.global_variables_initializer()
-        sess.run(init_op)
-        mask = sess.run(mask)
-    contour, _ = cv2.findContours(mask, mode=cv2.RETR_CCOMP, method=cv2.CHAIN_APPROX_SIMPLE)
-    max_dis = 0
-    contour = contour.reshape(-1, 2)
-    for i in range(contour.shape[0]):
-        for j in range(contour.shape[0]):
-            if i == j:
-                continue
-            dis = calc_distance(contour[i], contour[j])
-            if dis > max_dis:
-                max_dis = dis
-    return max_dis
+# def calc_max_edge(mask):
+#     with tf.Session() as sess:
+#         init_op = tf.global_variables_initializer()
+#         sess.run(init_op)
+#         mask = sess.run(mask)
+#     contour, _ = cv2.findContours(mask, mode=cv2.RETR_CCOMP, method=cv2.CHAIN_APPROX_SIMPLE)
+#     max_dis = 0
+#     contour = contour.reshape(-1, 2)
+#     for i in range(contour.shape[0]):
+#         for j in range(contour.shape[0]):
+#             if i == j:
+#                 continue
+#             dis = calc_distance(contour[i], contour[j])
+#             if dis > max_dis:
+#                 max_dis = dis
+#     return max_dis
 
 
-def calc_min_distance(mask1, mask2):
-    with tf.Session() as sess:
-        mask1 = sess.run(mask1)
-        mask2 = sess.run(mask2)
-    points1, points2 = [], []
-    for y in range(mask1.shape[0]):
-        for x in range(mask1.shape[1]):
-            if mask1[y, x] == 1:
-                points1.append([y, x])
-            if mask2[y, x] == 1:
-                points2.append([y, x])
-    min_dis = np.inf
-    for point1 in points1:
-        for point2 in point2:
-            dis = calc_distance(point1, point2)
-            if dis < min_dis:
-                min_dis = dis
-    return min_dis
+# def calc_min_distance(mask1, mask2):
+#     with tf.Session() as sess:
+#         mask1 = sess.run(mask1)
+#         mask2 = sess.run(mask2)
+#     points1, points2 = [], []
+#     for y in range(mask1.shape[0]):
+#         for x in range(mask1.shape[1]):
+#             if mask1[y, x] == 1:
+#                 points1.append([y, x])
+#             if mask2[y, x] == 1:
+#                 points2.append([y, x])
+#     min_dis = np.inf
+#     for point1 in points1:
+#         for point2 in point2:
+#             dis = calc_distance(point1, point2)
+#             if dis < min_dis:
+#                 min_dis = dis
+#     return min_dis
 
 
 def calc_emb_loss_single(maps):
@@ -126,8 +126,8 @@ def calc_emb_loss_single(maps):
             tmp = tf.cond(tf.equal(num, 0.),
                           lambda: tf.constant(0.),
                           lambda: (tf.reduce_sum(
-                                    tf.math.maximum(
-                                    w_scale*tf.reduce_sum(tf.abs((pred_map-u)*tf.expand_dims(mask, axis=-1)), axis=-1)-eta, 0))/num))
+                              tf.math.maximum(
+                                  w_scale*tf.reduce_sum(tf.abs((pred_map-u)*tf.expand_dims(mask, axis=-1)), axis=-1)-eta, 0))/num))
             # tmp = tf.Print(tmp, ['every_loss_var: ', tmp])
             l_var += tmp
             i = i+1
@@ -181,8 +181,6 @@ def loss(pred_seg_maps, emb_pred_map, gt_map, kernels, training_mask):
         # for complete loss
         pred_text_map = pred_seg_maps[:, 0, :, :]
 
-        # NOTE: the mask is pred_map, may try gt_map?
-        mask = tf.to_float(tf.greater(pred_text_map*training_mask, 0.5))
         pred_text_map = pred_text_map*training_mask
         emb_pred_map = emb_pred_map*tf.expand_dims(training_mask, axis=-1)
 
@@ -193,26 +191,25 @@ def loss(pred_seg_maps, emb_pred_map, gt_map, kernels, training_mask):
         zero_tensor = tf.zeros_like(gt_map)
         gt_map = tf.where(tf.greater(gt_map, 0.), one_tensor, zero_tensor)
 
-        if config['OHM']:
-            pred_maps, gt_maps = tf.map_fn(online_hard_min, (pred_text_map, gt_map))
-        else:
-            pred_maps, gt_maps = pred_text_map, gt_map
+        pred_maps, gt_maps = tf.map_fn(online_hard_min, (pred_text_map, gt_map))
         ohm_dice_loss = cal_dice_loss(pred_maps, gt_maps)
 
         dice_loss = tf.reduce_mean(ohm_dice_loss)
+        # dice_loss=tf.Print(dice_loss,['full loss',dice_loss])
         tf.add_to_collection('losses', 0.5*dice_loss)
 
         for i in range(config['n']-1):
             # for shrink loss
             pred_map = pred_seg_maps[:, i+1, :, :]
             gt_map = kernels[:, i, :, :]
-
-            pred_map = pred_map*mask
-            gt_map = gt_map*mask
+            pred_map = pred_map*training_mask
+            gt_map = gt_map*training_mask
+            # ohem for gt_map
+            pred_map, gt_map = tf.map_fn(online_hard_min, (pred_map, gt_map))
 
             dice_loss = cal_dice_loss(pred_map, gt_map)
             dice_loss = tf.reduce_mean(dice_loss)
-            # NOTE the paper is divide Ls by (n-1), I don't divide this for long time
+            # dice_loss=tf.Print(dice_loss,['kernel loss',dice_loss])
             tf.add_to_collection('losses', (1-0.5)*dice_loss/(n-1))
 
         # loss for embedding maps

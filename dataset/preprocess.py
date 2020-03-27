@@ -205,8 +205,6 @@ def process_data_np(image, label, bboxes):  # input one image, label for ignore 
     gt_kernals = np.array(gt_kernals)
 
     img = Image.fromarray(img)
-    # img = img.convert('RGB')
-    # img = transforms.ColorJitter(brightness = 32.0 / 255, saturation = 0.5)(img)
     img = np.asarray(img)
 
     return img, gt_text, gt_kernals, training_mask  # gt_text: 每个物体的编号不同，gt_kernels: 不同大小的kernel train_mask: 没有标签为0，不训练
