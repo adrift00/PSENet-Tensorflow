@@ -13,7 +13,7 @@ from tensorflow.python.client import timeline
 import util
 from configuration import TRAIN_CONFIG
 from dataset.dataloader import DataLoader
-from model.loss import loss_with_thresh, loss
+from model.loss import loss
 from model.model_v2 import model, model_deconv
 
 slim = tf.contrib.slim
@@ -46,8 +46,7 @@ def tower_loss(scope, images, labels, kernels, training_mask, gt_thresh, thresh_
 
     # Build the portion of the Graph calculating the losses. Note that we will
     # assemble the total_loss using a custom function below.
-    _ = loss_with_thresh(pred_gts, labels, kernels, training_mask, thresh_map, binary_map, gt_thresh, thresh_mask)
-    # _ = loss(pred_gts, labels, kernels, training_mask)
+    _ = loss(pred_gts, labels, kernels, training_mask, thresh_map, binary_map, gt_thresh, thresh_mask)
 
     # Assemble all of the losses for the current tower only.
     losses = tf.compat.v1.get_collection('losses', scope)

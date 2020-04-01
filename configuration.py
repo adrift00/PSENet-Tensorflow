@@ -12,7 +12,6 @@ TRAIN_CONFIG = {
     'use_rotation': False,
     'm': 0.4,
     'n': 2,
-    'OHM': True,
 
     'weight_decay': 5e-4,
 
@@ -27,8 +26,7 @@ TRAIN_CONFIG = {
         'lr_values': [1e-3, 1e-4, 1e-5]
     },
     'deformable': False,
-    # loss weights
-    # 'complete_weight': 1,
+    'complete_weight': 5,
     'shrink_weight': 5,
     'binary_weight': 1,
     'thresh_weight': 10,

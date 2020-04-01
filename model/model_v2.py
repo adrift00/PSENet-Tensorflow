@@ -160,7 +160,7 @@ def model(inputs, data_format='channels_first', is_training=True):
             F_multi = batch_norm(F_multi, training=is_training, data_format=data_format)
             feat = tf.nn.relu(F_multi)
 
-        for i in range(config['n']-1): # remove the complete pred to fit the db-net
+        for i in range(config['n']): # remove the complete pred to fit the db-net
             seg_map = tf.layers.conv2d(feat, 1, 1, data_format=data_format)  # 采用的卷积输出通道数只有一个，每个kernel给出一个预测图
             seg_map = tf.sigmoid(unpool(seg_map, 4, data_format=data_format))
             if i == 0:
